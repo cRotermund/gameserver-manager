@@ -65,7 +65,7 @@ def start():
         console.log("[bold red]Server is not stopped, can not start")
         return
 
-    console.log("Starting...")
+    console.log("Sending the server start request...")
     body = { "action" : "start" }
     r = __send(body)
 
@@ -77,7 +77,7 @@ def start():
 @app.command()
 def stop():
     s = __status()
-    console.log("Stopping")
+    console.log("Sending the stop request...")
     body = { "action" : "stop" }
     r = __send(body)
 
@@ -88,9 +88,9 @@ def stop():
 
 @app.command()
 def status():
-    console.log("Status")
+    console.log("Getting server status...")
     s = __status()["status"]
-    console.log(s)
+    console.log("Status: " + s)
 
 if __name__ == "__main__":
     app()
