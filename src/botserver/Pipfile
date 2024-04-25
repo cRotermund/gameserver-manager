@@ -1,0 +1,16 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+requests = "*"
+python-dotenv = "*"
+requests_auth_aws_sigv4 = "*"
+"discord.py" = "*"
+rich = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.12"
