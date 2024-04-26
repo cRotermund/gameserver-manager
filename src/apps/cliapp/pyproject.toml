@@ -1,0 +1,16 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "cliapp"
+version = "1.0.0"
+authors = ["Chad Rotermund"]
+maintainers = ["Chad Rotermund"]
+description = "The game server manager CLI application."
+
+[tool.poetry.dependencies]
+python = "^3.12"
+typer = "^0.12.3"
+rich = "^13.7.1"
+python-dotenv = "^1.0.1"

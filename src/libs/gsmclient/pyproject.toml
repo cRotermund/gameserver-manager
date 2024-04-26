@@ -1,0 +1,15 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "gsmclient"
+version = "1.0.0"
+authors = ["Chad Rotermund"]
+maintainers = ["Chad Rotermund"]
+description = "Shared libraries that enable the game server manager applications."
+
+[tool.poetry.dependencies]
+python = "^3.12"
+requests = "^2.3"
+requests_auth_aws_sigv4 = "^0.7"

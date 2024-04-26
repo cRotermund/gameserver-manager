@@ -1,0 +1,15 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "botdaemon"
+version = "1.0.0"
+authors = ["Chad Rotermund"]
+maintainers = ["Chad Rotermund"]
+description = "The daemon that backs the GSM discord bot."
+
+[tool.poetry.dependencies]
+python = "^3.12"
+discord-py = "^2.3.2"
+python-dotenv = "^1.0.1"

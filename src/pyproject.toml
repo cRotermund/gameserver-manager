@@ -1,8 +1,0 @@
-[project]
-name = "gsmclient"
-version = "0.1.0"
-description = "The GSM client"
-
-[build-system]
-build-backend = "flit_core.buildapi"
-requires = ["flit_core >=3.2,<4"]
