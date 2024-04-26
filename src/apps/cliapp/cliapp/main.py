@@ -1,7 +1,7 @@
 import os
 import typer
 
-from libs.gsmclient.gsmclient import GSMClient
+from gsmclient import GSMClient
 from dotenv import load_dotenv
 from rich.console import Console
 

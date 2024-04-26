@@ -1,4 +1,5 @@
+.venv
 **/.env
 **/dist
 **/build
-**/venv*
+**/pkg_srv

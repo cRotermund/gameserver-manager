@@ -14,3 +14,10 @@ python = "^3.12"
 typer = "^0.12.3"
 rich = "^13.7.1"
 python-dotenv = "^1.0.1"
+gsmclient = "1.0.0"
+
+[[tool.poetry.source]]
+name = "local"
+url = "http://localhost:9999"
+priority = "supplemental"
+

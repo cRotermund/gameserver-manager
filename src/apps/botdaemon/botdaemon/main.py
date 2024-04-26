@@ -2,7 +2,7 @@
 import os
 import discord
 
-from libs.gsmclient.gsmclient import GSMClient
+from gsmclient import GSMClient
 from discord.ext import commands
 from dotenv import load_dotenv
 
