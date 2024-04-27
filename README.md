@@ -22,6 +22,7 @@ To add a dependency:
 * Execute `poetry add <DEPENDENCY>` (i.e. `poetry add requests`)
 
 ## Deployment
+[![Docker Image CI](https://github.com/cRotermund/gameserver-manager/actions/workflows/docker-image.yml/badge.svg)](https://github.com/cRotermund/gameserver-manager/actions/workflows/docker-image.yml)
 
 ### Daemon
 * GitHub action builds image pushes to git hub packages
