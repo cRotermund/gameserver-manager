@@ -6,7 +6,7 @@ from gsmclient import GSMClient
 from discord.ext import commands
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv("../.env")
 
 GSM_ACCESS_KEY = os.getenv("GSM_ACCESS_KEY")
 GSM_ACCESS_SECRET = os.getenv("GSM_ACCESS_SECRET")
@@ -60,4 +60,8 @@ async def serverstatus(ctx):
     s = client.status()["status"]
     await ctx.send(f"The server's status is: {s}")
 
-bot.run(BOT_TOKEN)
+def start_daemon():
+    bot.run(BOT_TOKEN)
+
+if __name__ == "__main__":
+    start_daemon()

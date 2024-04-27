@@ -5,7 +5,8 @@ from gsmclient import GSMClient
 from dotenv import load_dotenv
 from rich.console import Console
 
-load_dotenv()
+load_dotenv("../.env")
+
 GSM_ACCESS_KEY = os.getenv("GSM_ACCESS_KEY")
 GSM_ACCESS_SECRET = os.getenv("GSM_ACCESS_SECRET")
 GSM_REGION = os.getenv("GSM_REGION")

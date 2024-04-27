@@ -9,6 +9,9 @@ authors = ["Chad Rotermund"]
 maintainers = ["Chad Rotermund"]
 description = "The daemon that backs the GSM discord bot."
 
+[tool.poetry.scripts]
+botdaemon = "botdaemon:main.start_daemon"
+
 [tool.poetry.dependencies]
 python = "^3.12"
 discord-py = "^2.3.2"

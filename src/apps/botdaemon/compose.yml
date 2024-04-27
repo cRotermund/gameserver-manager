@@ -1,0 +1,9 @@
+name: discord-botdaemon
+
+services:
+  botdaemon:
+    env_file: .env
+    image: botdaemon
+    build:
+      context: ../.. #/src
+      dockerfile: ./apps/botdaemon/Dockerfile
