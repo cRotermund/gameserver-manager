@@ -21,6 +21,12 @@ To add a dependency:
 * Navigate to the root directory of the project you wish to add the dependency (e.g. `src/libs/gsmclient`)
 * Execute `poetry add <DEPENDENCY>` (i.e. `poetry add requests`)
 
+## Deployment
+
+### Daemon
+* GitHub action builds image pushes to git hub packages
+* EC2 server pulls, runs in swarm
+
 ## License
 
 [MIT](https://choosealicense.com/licenses/mit/)
