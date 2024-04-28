@@ -9,9 +9,10 @@ env:
   IMAGE_NAME: ${{ github.repository }}
   
 jobs:
-
+  
   build:
-
+    
+    permissions: write-all
     runs-on: ubuntu-latest
 
     steps:
