@@ -1,0 +1,6 @@
+name: discord-botdaemon
+
+services:
+  botdaemon:
+    env_file: .env
+    image: ghcr.io/crotermund/gameserver-manager:main

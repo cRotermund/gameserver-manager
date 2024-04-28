@@ -3,7 +3,6 @@
 A simple set of libraries curated to manage my gameserver in AWS via a lambda gateway of my own design.
 The implementation contains a command line application and a very simple discord bot.
 
-
 ## Local Development
 
 Local development relies on a virtual environment to share the module code.  Poetry is used
@@ -25,8 +24,8 @@ To add a dependency:
 [![Docker Image CI](https://github.com/cRotermund/gameserver-manager/actions/workflows/docker-image.yml/badge.svg)](https://github.com/cRotermund/gameserver-manager/actions/workflows/docker-image.yml)
 
 ### Daemon
-* GitHub action builds image pushes to git hub packages
-* EC2 server pulls, runs in swarm
+* GitHub action builds image pushes to github packages
+* Deployment is currently manual, ssh on to server exec docker commands to pull, launch and update container
 
 ## License
 
