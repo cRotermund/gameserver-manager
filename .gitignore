@@ -1,6 +1,0 @@
-.venv
-**/.env
-**/dist
-**/build
-**/pkg_srv
-**/.idea
