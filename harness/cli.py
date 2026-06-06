@@ -3,15 +3,18 @@
 
 from __future__ import annotations
 
-import argparse
+import enum
 import os
 import shlex
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Optional
 
-ROOT = Path(__file__).resolve().parent
+import typer
+
+ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
 INFRA = ROOT / "infra" / "k8s"
 
@@ -33,6 +36,22 @@ IMAGES: dict[str, str] = {
 }
 
 OVERLAYS = ["local", "prod"]
+
+class Cluster(enum.Enum):
+    KIND = "kind"
+    MINIKUBE = "minikube"
+    RANCHER_DESKTOP = "rancher-desktop"
+    OTHER = "other"  # kubectl available but context doesn't match known clusters
+
+# Maps kubectl context prefixes to Cluster members.
+# Kind uses "kind-<name>" contexts; minikube and Rancher Desktop match exactly.
+CLUSTER_PREFIXES: dict[str, Cluster] = {
+    "kind-": Cluster.KIND,
+    "minikube": Cluster.MINIKUBE,
+    "rancher-desktop": Cluster.RANCHER_DESKTOP,
+}
+
+app = typer.Typer(help="Build and deploy game-server-manager services to a local Kubernetes cluster.")
 
 
 # ---------------------------------------------------------------------------
@@ -67,23 +86,18 @@ def container_cli() -> str:
     )
 
 
-def detect_cluster() -> str | None:
-    """Return the local cluster type or None if none is detected."""
-    for name, ctx in [("minikube", "minikube"), ("kind", "kind-"), ("rancher-desktop", "rancher-desktop")]:
-        try:
-            kubectl_current = run_quiet(["kubectl", "config", "current-context"])
-            if name == "kind" and kubectl_current.startswith(ctx):
-                return "kind"
-            if kubectl_current == ctx:
-                return name
-        except Exception:
-            pass
-
+def detect_cluster() -> Cluster | None:
+    """Return the local cluster type or None if kubectl is unavailable."""
     try:
-        run_quiet(["kubectl", "config", "current-context"])
-        return "kubectl"
+        ctx = run_quiet(["kubectl", "config", "current-context"])
     except Exception:
         return None
+
+    for prefix, member in CLUSTER_PREFIXES.items():
+        if ctx.startswith(prefix):
+            return member
+
+    return Cluster.OTHER
 
 
 def load_images(images: list[str]) -> None:
@@ -91,7 +105,7 @@ def load_images(images: list[str]) -> None:
     cluster = detect_cluster()
     cli = container_cli()
 
-    if cluster == "minikube":
+    if cluster is Cluster.MINIKUBE:
         for img in images:
             if cli == "podman":
                 fd, path = tempfile.mkstemp(suffix=".tar")
@@ -104,13 +118,13 @@ def load_images(images: list[str]) -> None:
             else:
                 run(["minikube", "image", "load", img])
 
-    elif cluster == "kind":
+    elif cluster is Cluster.KIND:
         for img in images:
             run(["kind", "load", "docker-image", img])
 
     # Docker Desktop and Rancher Desktop share the host Docker daemon —
     # images are already available.
-    elif cluster in (None, "kubectl", "rancher-desktop"):
+    elif cluster in (None, Cluster.RANCHER_DESKTOP, Cluster.OTHER):
         pass
 
     else:
@@ -122,10 +136,20 @@ def load_images(images: list[str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def cmd_build(services: list[str], tag: str) -> None:
+@app.command()
+def build(
+    services: Optional[list[str]] = typer.Argument(None, help="Services to build (default: all). Choices: api, web, bot"),
+    tag: str = typer.Option("latest", "--tag", help="Image tag"),
+) -> None:
+    if services:
+        invalid = set(services) - set(SERVICES)
+        if invalid:
+            raise typer.BadParameter(
+                f"Invalid service(s): {', '.join(invalid)}. Choices: {', '.join(SERVICES)}"
+            )
     chosen = [s for s in SERVICES if not services or s in services]
     if not chosen:
-        sys.exit("No services matched — choices: " + ", ".join(SERVICES))
+        raise typer.Exit(code=1)
 
     images: list[str] = []
     for name in chosen:
@@ -139,14 +163,17 @@ def cmd_build(services: list[str], tag: str) -> None:
         load_images(images)
 
 
-def cmd_apply(overlay: str) -> None:
+@app.command()
+def apply(
+    overlay: str = typer.Argument("local", help="Overlay to apply (choices: local, prod)"),
+) -> None:
+    if overlay not in OVERLAYS:
+        raise typer.BadParameter(f"Invalid overlay '{overlay}'. Choices: {', '.join(OVERLAYS)}")
     overlay_dir = INFRA / overlay
     if not overlay_dir.is_dir():
-        sys.exit(f"overlay not found: {overlay_dir}")
+        raise typer.Exit(code=1)
 
     print(f"\n--- Applying overlay '{overlay}' ---")
-    # Use a temp kustomize build + apply to support older kubectl
-    # implementations that don't have -k pointing at a directory.
     kustomize = "kustomize" if _has("kustomize") else None
 
     if kustomize:
@@ -158,10 +185,15 @@ def cmd_apply(overlay: str) -> None:
         run(["kubectl", "apply", "-k", str(overlay_dir)])
 
 
-def cmd_delete(overlay: str) -> None:
+@app.command()
+def delete(
+    overlay: str = typer.Argument("local", help="Overlay to delete (choices: local, prod)"),
+) -> None:
+    if overlay not in OVERLAYS:
+        raise typer.BadParameter(f"Invalid overlay '{overlay}'. Choices: {', '.join(OVERLAYS)}")
     overlay_dir = INFRA / overlay
     if not overlay_dir.is_dir():
-        sys.exit(f"overlay not found: {overlay_dir}")
+        raise typer.Exit(code=1)
 
     print(f"\n--- Deleting overlay '{overlay}' ---")
     kustomize = "kustomize" if _has("kustomize") else None
@@ -175,9 +207,16 @@ def cmd_delete(overlay: str) -> None:
         run(["kubectl", "delete", "-k", str(overlay_dir)])
 
 
-def cmd_portforward(service: str, local_port: int | None, remote_port: int | None) -> None:
+@app.command(name="port-forward")
+def portforward(
+    service: str = typer.Argument(..., help="Service to forward. Choices: api, web"),
+    local_port: Optional[int] = typer.Option(None, "--local-port", help="Local port (default: 8080 for api, 3000 for web)"),
+    remote_port: Optional[int] = typer.Option(None, "--remote-port", help="Service port (default: same as service default)"),
+) -> None:
+    if service not in ("api", "web"):
+        raise typer.BadParameter(f"Invalid service '{service}'. Choices: api, web")
     if service == "bot":
-        sys.exit("bot has no service port to forward")
+        raise typer.BadParameter("bot has no service port to forward")
 
     default = SERVICE_PORTS[service]
     lp = local_port if local_port is not None else default
@@ -200,74 +239,5 @@ def _has(cmd: str) -> bool:
         return False
 
 
-# ---------------------------------------------------------------------------
-# cli
-# ---------------------------------------------------------------------------
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    # build
-    bp = sub.add_parser("build", help="Build Docker images")
-    bp.add_argument(
-        "services",
-        nargs="*",
-        choices=list(SERVICES),
-        help="Services to build (default: all)",
-    )
-    bp.add_argument(
-        "--tag", default="latest", help="Image tag (default: latest)"
-    )
-
-    # apply
-    ap = sub.add_parser("apply", help="Apply a Kustomize overlay")
-    ap.add_argument(
-        "overlay",
-        choices=OVERLAYS,
-        default="local",
-        nargs="?",
-        help="Overlay to apply (default: local)",
-    )
-
-    # delete
-    dp = sub.add_parser("delete", help="Delete a Kustomize overlay")
-    dp.add_argument(
-        "overlay",
-        choices=OVERLAYS,
-        default="local",
-        nargs="?",
-        help="Overlay to delete (default: local)",
-    )
-
-    # port-forward
-    pp = sub.add_parser("port-forward", help="Forward a service port locally")
-    pp.add_argument("service", choices=SERVICES, help="Service to forward")
-    pp.add_argument(
-        "--local-port",
-        type=int,
-        default=None,
-        help="Local port (default: service default — 8080 for api, 3000 for web)",
-    )
-    pp.add_argument(
-        "--remote-port",
-        type=int,
-        default=None,
-        help="Service port (default: service default)",
-    )
-
-    args = parser.parse_args()
-
-    if args.command == "build":
-        cmd_build(args.services, args.tag)
-    elif args.command == "apply":
-        cmd_apply(args.overlay)
-    elif args.command == "delete":
-        cmd_delete(args.overlay)
-    elif args.command == "port-forward":
-        cmd_portforward(args.service, args.local_port, args.remote_port)
-
-
 if __name__ == "__main__":
-    main()
+    app()

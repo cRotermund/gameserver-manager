@@ -23,7 +23,7 @@ Install these before you start. Versions listed are the minimum required.
 | ---------- | ---------- | ----------------------------------------------------- | ------------------- |
 | Go         | >= 1.24    | [go.dev/dl](https://go.dev/dl/)                       | API service         |
 | Node.js    | >= 22      | [nodejs.org](https://nodejs.org/)                     | Web, Discord bot    |
-| Python     | >= 3.10    | [python.org](https://www.python.org/downloads/)       | `deploy.py` harness |
+| Python     | >= 3.10    | [python.org](https://www.python.org/downloads/)       | `deploy` harness + `pip install -e .` |
 | Docker     | latest     | See container runtime notes below                     | Container builds    |
 | kubectl    | latest     | [kubernetes.io](https://kubernetes.io/docs/tasks/tools/) | K8s deployments  |
 | kustomize  | latest     | [kustomize.io](https://kustomize.io/)                 | K8s configuration   |
@@ -37,6 +37,7 @@ Clone the repo:
 ```sh
 git clone https://github.com/cRotermund/gameserver-manager.git
 cd gameserver-manager
+pip install -e .
 ```
 
 ### Two Development Workflows
@@ -94,7 +95,7 @@ Most IDEs can run these commands as launch configurations:
 
 Matches the production environment. All commands are issued from the repository root.
 
-The [`deploy.py`](deploy.py) harness is the single entry point for container-based development.
+The [`deploy`](#) CLI (see [harness/](harness/)) is the single entry point for container-based development.
 
 **1. Start a local Kubernetes cluster**
 
@@ -118,13 +119,13 @@ kubectl config current-context
 
 ```sh
 # Build all services
-python deploy.py build
+deploy build
 
 # Build a specific service
-python deploy.py build api
+deploy build api
 
 # Custom tag
-python deploy.py build --tag dev
+deploy build --tag dev
 ```
 
 Images are tagged as `localhost/<name>:latest` and automatically loaded into your cluster's image cache (no registry needed).
@@ -140,7 +141,7 @@ cp infra/k8s/local/bot.env.sample infra/k8s/local/bot.env
 
 ```sh
 # Apply the local overlay
-python deploy.py apply
+deploy apply
 
 # Check that pods are running
 kubectl get pods
@@ -152,22 +153,22 @@ The `local` overlay uses `localhost/`-prefixed images with `IfNotPresent` pull p
 
 ```sh
 # Port-forward API to localhost:8080
-python deploy.py port-forward api
+deploy port-forward api
 
 # Port-forward web UI to localhost:3000 (in another terminal)
-python deploy.py port-forward web
+deploy port-forward web
 ```
 
 Custom ports:
 
 ```sh
-python deploy.py port-forward api --local-port 9090
+deploy port-forward api --local-port 9090
 ```
 
 **6. Tear down**
 
 ```sh
-python deploy.py delete
+deploy delete
 ```
 
 ---
@@ -206,7 +207,7 @@ The harness and Dockerfiles work with both. The harness auto-detects whichever i
 
 | Problem                                     | Likely Cause                                                 | Fix                                                           |
 | ------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------- |
-| `ErrImagePull` / `ImagePullBackOff`         | Image not available in cluster cache.                        | Run `python deploy.py build` to rebuild into the local daemon. |
+| `ErrImagePull` / `ImagePullBackOff`         | Image not available in cluster cache.                        | Run `deploy build` to rebuild into the local daemon. |
 | `CrashLoopBackOff` on any pod               | The container exits immediately after starting — could be a code error, missing config, or bad env var. | Check the logs first: `kubectl logs deployment/<name>`. For the bot specifically, a missing `DISCORD_TOKEN` is the most common cause. |
 | `kubectl get pods` shows nothing            | Wrong kubeconfig context.                                    | `kubectl config get-contexts` and switch to your local cluster. |
 | `go run .` fails with "package not found"   | Not running from the service directory.                      | cd into the service directory first.                          |
@@ -318,6 +319,7 @@ src/
 │   └── control-plane-web/      # TypeScript web frontend
 ├── discord/
 │   └── control-bot/            # Discord bot
+harness/                        # Python CLI for building and deploying
 docs/                           # Architecture and dev guides
 infra/
 └── k8s/

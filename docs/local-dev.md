@@ -101,12 +101,13 @@ After the cluster is running, install the **Kubernetes** extension in Podman Des
 ```powershell
 git clone https://github.com/cRotermund/gameserver-manager.git
 cd gameserver-manager
+pip install -e .
 ```
 
 Build all service images. The harness auto-detects Podman and Minikube, handles image loading into the cluster automatically.
 
 ```powershell
-python deploy.py build
+deploy build
 ```
 
 Expected output:
@@ -136,7 +137,7 @@ If you skip this, the bot pod will crash-loop. That's fine for API+Web developme
 ## Deploy
 
 ```powershell
-python deploy.py apply
+deploy apply
 ```
 
 Check that pods are running:
@@ -161,11 +162,11 @@ In separate terminals:
 
 ```powershell
 # Terminal 1 — API
-python deploy.py port-forward api
+deploy port-forward api
 # API available at http://localhost:8080
 
 # Terminal 2 — Web UI
-python deploy.py port-forward web
+deploy port-forward web
 # Web UI available at http://localhost:3000
 ```
 
@@ -201,7 +202,7 @@ npm run dev
 
 ```powershell
 # Remove deployments from the cluster
-python deploy.py delete
+deploy delete
 
 # Stop Minikube (preserves state for next session)
 minikube stop
@@ -234,7 +235,7 @@ cd gameserver-manager
 # Then run podman and minikube from WSL as well
 ```
 
-### `deploy.py build` fails: "Neither podman nor docker"
+### `deploy build` fails: "Neither podman nor docker"
 
 The harness can't find a container runtime on your PATH. Ensure Podman Desktop is running and `podman` is available:
 
@@ -250,8 +251,8 @@ The harness should have loaded images into Minikube automatically. If you still 
 
 ```powershell
 kubectl config use-context minikube
-python deploy.py build
-python deploy.py apply
+deploy build
+deploy apply
 ```
 
 ### Port already in use
@@ -259,7 +260,7 @@ python deploy.py apply
 If port 8080 or 3000 is occupied, use a custom local port:
 
 ```powershell
-python deploy.py port-forward api --local-port 9090
+deploy port-forward api --local-port 9090
 # Then access the API at http://localhost:9090
 ```
 

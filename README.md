@@ -60,7 +60,7 @@ All components run as containers on Kubernetes, defined with Kustomize.
 | ---------- | ---------- | ------------------------------- |
 | Go         | >= 1.24    | API service                     |
 | Node.js    | >= 22      | Web frontend & Discord bot      |
-| Python     | >= 3.10    | `deploy.py` harness (K8s only)  |
+| Python     | >= 3.10    | `deploy` harness (K8s only)  |
 | Docker     | latest     | Container builds                |
 | kubectl    | latest     | K8s deployments                 |
 | kustomize  | latest     | K8s configuration               |
@@ -99,20 +99,23 @@ Open `http://localhost:3000` for the web UI, or point your HTTP client at `http:
 
 **Path B — Run in containers with Kubernetes**
 
-Matches the production environment. Uses `deploy.py` as a one-stop harness.
+Matches the production environment. Uses the `deploy` CLI as a one-stop harness.
 
 ```sh
 # 1. Start your local cluster (minikube, kind, or Rancher Desktop)
 
-# 2. Build all images
-python deploy.py build
+# 2. Install Python dependencies
+pip install -e .
 
-# 3. Deploy to the cluster
-python deploy.py apply
+# 3. Build all images
+deploy build
 
-# 4. Port-forward the services
-python deploy.py port-forward api     # API at localhost:8080
-python deploy.py port-forward web     # Web at localhost:3000
+# 4. Deploy to the cluster
+deploy apply
+
+# 5. Port-forward the services
+deploy port-forward api     # API at localhost:8080
+deploy port-forward web     # Web at localhost:3000
 ```
 
 The harness auto-detects your container CLI (podman or docker) and cluster type. For the Discord bot, copy `infra/k8s/local/bot.env.sample` to `bot.env` with your token before deploying.
