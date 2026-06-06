@@ -6,9 +6,11 @@
 - Web application for user control and observability
 - Discord bot for in-chat control and convenience
 
-# PRIMARY MOTIVATIONS
+## PRIMARY MOTIVATIONS
 
 - extremely cheap, ideally totally free to run (ignoring backing kubernetes infra, already established).
+
+# Subsystems
 
 # REST API
 - golang dockerized 
