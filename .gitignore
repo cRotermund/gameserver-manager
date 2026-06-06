@@ -4,6 +4,8 @@
 .env
 .env.*
 !.env.example
+bot.env
+bot-secret.env
 *.pem
 *.key
 certs/

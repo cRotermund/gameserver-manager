@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-plane-web
+  labels:
+    app: control-plane-web
+spec:
+  selector:
+    app: control-plane-web
+  ports:
+    - port: 3000
+      targetPort: 3000

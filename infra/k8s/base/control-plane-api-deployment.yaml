@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-plane-api
+  labels:
+    app: control-plane-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: control-plane-api
+  template:
+    metadata:
+      labels:
+        app: control-plane-api
+    spec:
+      containers:
+        - name: control-plane-api
+          image: control-plane-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
