@@ -1,0 +1,460 @@
+openapi: "3.1.0"
+info:
+  title: Game Server Control Plane
+  version: "1.0.0"
+  description: REST API for managing game servers on AWS infrastructure.
+servers:
+  - url: /v1
+
+security:
+  - OAuth2:
+      - control:rw
+      - control:ro
+      - observability:ro
+
+paths:
+  /servers:
+    get:
+      summary: List all managed game servers
+      description: Returns every registered server with basic identity, spec, and status info.
+      operationId: listServers
+      security:
+        - OAuth2:
+            - control:ro
+            - control:rw
+      responses:
+        "200":
+          description: OK
+          headers:
+            Cache-Control:
+              description: Caching policy for the response.
+              schema:
+                type: string
+                example: max-age=300
+            ETag:
+              description: Opaque entity tag for conditional requests.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ServerSummary"
+        "304":
+          description: "Not Modified — the client's cached copy is still fresh."
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /servers/{serverId}:
+    parameters:
+      - $ref: "#/components/parameters/ServerId"
+    get:
+      summary: Get detailed server state
+      description: Returns operating state including IP, connected clients, and resource usage.
+      operationId: getServer
+      security:
+        - OAuth2:
+            - control:ro
+            - control:rw
+      responses:
+        "200":
+          description: OK
+          headers:
+            Cache-Control:
+              description: Caching policy for the response.
+              schema:
+                type: string
+                example: max-age=300
+            ETag:
+              description: Opaque entity tag for conditional requests.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerDetail"
+        "304":
+          description: "Not Modified — the client's cached copy is still fresh."
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /servers/{serverId}/processes:
+    parameters:
+      - $ref: "#/components/parameters/ServerId"
+    get:
+      summary: List running processes
+      description: >
+        Returns the process table for the server. This is a potentially
+        expensive call and is separated from the detail endpoint so that
+        basic server profiling remains cheap.
+      operationId: listProcesses
+      security:
+        - OAuth2:
+            - control:ro
+            - control:rw
+      responses:
+        "200":
+          description: OK
+          headers:
+            Cache-Control:
+              description: Caching policy for the response.
+              schema:
+                type: string
+                example: max-age=300
+            ETag:
+              description: Opaque entity tag for conditional requests.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProcessInfo"
+        "304":
+          description: "Not Modified — the client's cached copy is still fresh."
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /servers/{serverId}/start:
+    parameters:
+      - $ref: "#/components/parameters/ServerId"
+    post:
+      summary: Start a server
+      description: >
+        Initiates a server start. The API returns 202 Accepted immediately with
+        an operation resource that can be polled for completion.
+      operationId: startServer
+      security:
+        - OAuth2:
+            - control:rw
+      responses:
+        "202":
+          description: Accepted — operation in progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Operation"
+          headers:
+            Location:
+              description: URL to poll for operation status
+              schema:
+                type: string
+                format: uri
+                example: /v1/operations/abc123
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /servers/{serverId}/stop:
+    parameters:
+      - $ref: "#/components/parameters/ServerId"
+    post:
+      summary: Stop a server
+      operationId: stopServer
+      security:
+        - OAuth2:
+            - control:rw
+      responses:
+        "202":
+          description: Accepted — operation in progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Operation"
+          headers:
+            Location:
+              description: URL to poll for operation status
+              schema:
+                type: string
+                format: uri
+                example: /v1/operations/abc123
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /servers/{serverId}/reboot:
+    parameters:
+      - $ref: "#/components/parameters/ServerId"
+    post:
+      summary: Quick-reboot a server
+      description: >
+        Reboots the server OS without recycling the underlying instance.
+        Useful for applying OS-level changes or clearing transient issues.
+      operationId: rebootServer
+      security:
+        - OAuth2:
+            - control:rw
+      responses:
+        "202":
+          description: Accepted — operation in progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Operation"
+          headers:
+            Location:
+              description: URL to poll for operation status
+              schema:
+                type: string
+                format: uri
+                example: /v1/operations/abc123
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /operations/{operationId}:
+    parameters:
+      - $ref: "#/components/parameters/OperationId"
+    get:
+      summary: Poll operation status
+      description: Returns the current state of an async control operation.
+      operationId: getOperation
+      security:
+        - OAuth2:
+            - control:ro
+            - control:rw
+      responses:
+        "200":
+          description: OK
+          headers:
+            Cache-Control:
+              description: >
+                Caching policy. Operations in progress use a short TTL
+                (e.g. max-age=5); completed operations use the default
+                max-age=300.
+              schema:
+                type: string
+                example: max-age=5
+            ETag:
+              description: Opaque entity tag for conditional requests.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Operation"
+        "304":
+          description: "Not Modified — the client's cached copy is still fresh."
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  #############################################################################
+  # PUNTED — future endpoints
+  #############################################################################
+  # /servers/{serverId}/telemetry        — GET, snapshot view (json)
+  # /servers/{serverId}/telemetry/stream — GET, SSE text/event-stream
+  # /servers/{serverId}/logs             — GET, queryable log retrieval
+  # /servers/{serverId}/logs/stream      — GET, SSE log tail
+  # /servers                              — POST, register a new server record
+  # /servers/{serverId}                   — DELETE, de-register a server
+
+components:
+  securitySchemes:
+    OAuth2:
+      type: oauth2
+      description: System-to-system OAuth 2.0. Client credentials are scoped.
+      flows:
+        clientCredentials:
+          tokenUrl: /oauth/token
+          scopes:
+            control:ro: Read-only access to server state and operations
+            control:rw: Full control — start, stop, reboot servers
+            observability:ro: Read-only access to telemetry and logs
+
+  parameters:
+    ServerId:
+      name: serverId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    OperationId:
+      name: operationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    ServerSummary:
+      type: object
+      required: [server_id, name, game, specs, status]
+      properties:
+        server_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Human-readable label (not used as an identifier).
+        game:
+          type: string
+          description: The game this server is configured to run (e.g. "cs2", "valheim", "minecraft").
+        specs:
+          $ref: "#/components/schemas/HardwareSpecs"
+        status:
+          $ref: "#/components/schemas/ServerStatus"
+
+    ServerDetail:
+      allOf:
+        - $ref: "#/components/schemas/ServerSummary"
+        - type: object
+          required: [status]
+          properties:
+            ip_address:
+              type: string
+              nullable: true
+              description: Public or private IP. null when stopped.
+            connected_clients:
+              type: integer
+              minimum: 0
+              nullable: true
+            resource_usage:
+              $ref: "#/components/schemas/ResourceUsage"
+
+    HardwareSpecs:
+      type: object
+      required: [cores, memory_gb]
+      properties:
+        cores:
+          type: integer
+          minimum: 1
+        memory_gb:
+          type: integer
+          minimum: 1
+        bandwidth_gbps:
+          type: number
+          nullable: true
+
+    ServerStatus:
+      type: string
+      enum:
+        - stopped
+        - stopping
+        - starting
+        - running
+
+    ResourceUsage:
+      type: object
+      properties:
+        cpu_percent:
+          type: number
+          format: float
+        memory_percent:
+          type: number
+          format: float
+        disk_used_gb:
+          type: number
+          format: float
+        network_rx_mbps:
+          type: number
+          format: float
+        network_tx_mbps:
+          type: number
+          format: float
+
+    ProcessInfo:
+      type: object
+      required: [name, pid]
+      properties:
+        name:
+          type: string
+        pid:
+          type: integer
+        cpu_percent:
+          type: number
+        memory_mb:
+          type: number
+
+    Operation:
+      type: object
+      required: [operation_id, type, server_id, status, created_at]
+      properties:
+        operation_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [start, stop, reboot]
+        server_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, in_progress, completed, failed]
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        error:
+          type: string
+          nullable: true
+
+    ApiError:
+      type: object
+      required: [error, code]
+      properties:
+        error:
+          type: string
+          description: Human-readable description of the problem.
+        code:
+          type: string
+          description: Machine-readable error code, stable across versions.
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+          example:
+            error: "Server not found"
+            code: "NOT_FOUND"
+
+    Conflict:
+      description: Operation conflicts with current server state (e.g., starting an already-running server)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+          example:
+            error: "Server is already running"
+            code: "STATE_CONFLICT"
+
+    RateLimited:
+      description: Too many requests
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+          example:
+            error: "Rate limit exceeded"
+            code: "RATE_LIMITED"

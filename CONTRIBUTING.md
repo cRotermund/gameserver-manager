@@ -1,5 +1,7 @@
 # Languages & Technology Rules
 
+Use only:
+
 - GoLang
 - TypeScript
 - AWS Stack
@@ -7,3 +9,5 @@
 - IaC always
 - Kubernetes
 - Kustomize
+
+Any other technologies requires approval.
