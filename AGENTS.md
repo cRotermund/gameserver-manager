@@ -23,6 +23,7 @@ The project is early-stage. Design docs and API specs exist, but most service co
 ## Directory Conventions
 
 ```
+harness/                 ← Development harness (CLI for building, deploying, port-forwarding)
 src/services/<name>/     ← Each service gets its own directory
 src/discord/<name>/      ← Discord bot lives here
 src/pkg/                 ← Shared Go libraries (create as needed)

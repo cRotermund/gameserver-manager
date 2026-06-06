@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../base
+
+images:
+  - name: control-plane-api
+    newName: localhost/control-plane-api
+  - name: control-plane-web
+    newName: localhost/control-plane-web
+  - name: control-bot
+    newName: localhost/control-bot
+
+secretGenerator:
+  - name: control-bot-secret
+    envs:
+      - bot.env

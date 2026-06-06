@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-bot
+  labels:
+    app: control-bot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: control-bot
+  template:
+    metadata:
+      labels:
+        app: control-bot
+    spec:
+      containers:
+        - name: control-bot
+          image: control-bot:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DISCORD_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: control-bot-secret
+                  key: DISCORD_TOKEN
