@@ -104,6 +104,14 @@ cd gameserver-manager
 pip install -e .
 ```
 
+If `pip` warns that the scripts directory is not on PATH, the `deploy` command won't be found. Add the reported directory to your PATH, or use `python -m harness.cli` as a fallback (all examples below work with either approach).
+
+Verify with:
+
+```powershell
+deploy --help
+```
+
 Build all service images. The harness auto-detects Podman and Minikube, handles image loading into the cluster automatically.
 
 ```powershell

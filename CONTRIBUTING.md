@@ -40,6 +40,14 @@ cd gameserver-manager
 pip install -e .
 ```
 
+If `pip` warns that the scripts directory is not on PATH, the `deploy` command won't be found. Add the reported directory to your PATH, or use `python -m harness.cli` as a fallback (all examples below work with either approach).
+
+Verify with:
+
+```sh
+deploy --help
+```
+
 ### Two Development Workflows
 
 ---
@@ -207,6 +215,7 @@ The harness and Dockerfiles work with both. The harness auto-detects whichever i
 
 | Problem                                     | Likely Cause                                                 | Fix                                                           |
 | ------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------- |
+| `deploy: command not found`                 | Python's scripts directory not on PATH after `pip install`.  | Add the directory from the `pip` warning to PATH, or use `python -m harness.cli` instead. |
 | `ErrImagePull` / `ImagePullBackOff`         | Image not available in cluster cache.                        | Run `deploy build` to rebuild into the local daemon. |
 | `CrashLoopBackOff` on any pod               | The container exits immediately after starting — could be a code error, missing config, or bad env var. | Check the logs first: `kubectl logs deployment/<name>`. For the bot specifically, a missing `DISCORD_TOKEN` is the most common cause. |
 | `kubectl get pods` shows nothing            | Wrong kubeconfig context.                                    | `kubectl config get-contexts` and switch to your local cluster. |
