@@ -1,0 +1,84 @@
+# ==========================================
+# Environment Variables & Secrets (CRITICAL)
+# ==========================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+certs/
+secrets/
+
+# ==========================================
+# Operating System Files
+# ==========================================
+.DS_Store
+Thumbs.db
+*.local
+*.log
+
+# ==========================================
+# Go (Golang)
+# ==========================================
+# Compiled binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test and coverage outputs
+*.out
+*.test
+*.prof
+
+# ==========================================
+# Node.js / TypeScript
+# ==========================================
+# Dependencies
+node_modules/
+
+# TypeScript build outputs (if any)
+/dist/
+/build/
+
+# Linter/Formatter caches
+.eslintcache
+.prettiercache
+
+# Package manager logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==========================================
+# Docker
+# ==========================================
+# Ignore local data volumes or overrides you don't want in git
+docker-compose.override.yml
+.docker/
+
+# ==========================================
+# Kubernetes & Kustomize
+# ==========================================
+# Local cluster configurations or copied tokens
+.kube/
+kubeconfig
+*.kubeconfig
+
+# Local development Kustomize overlays (if you use them)
+# Standard base/overlays should be committed, but ignore individual test files
+kustomization.local.yaml
+
+# ==========================================
+# IDEs and Editors
+# ==========================================
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
