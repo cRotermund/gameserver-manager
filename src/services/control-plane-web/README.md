@@ -2,12 +2,14 @@
 
 Browser-based dashboard for the Game Server Manager. Consumes the REST API.
 
-## Running locally
+## Quick start
 
 ```sh
 npm install
-npm run dev   # starts on :3000
+npm run dev                           # listens on :3000
 ```
+
+See [CONTRIBUTING.md](../../../CONTRIBUTING.md) for full development environment setup, including the container-based workflow with Kubernetes.
 
 ## Building
 

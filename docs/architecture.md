@@ -61,7 +61,7 @@ The backbone of the system. All state mutations and queries flow through the API
 | POST   | `/v1/servers/{id}/reboot`      | `control:rw`     | Quick OS reboot (async)        |
 | GET    | `/v1/operations/{id}`          | `control:ro`     | Poll operation status          |
 
-Full spec: [`src/services/control-plane-api/openapi.yaml`](src/services/control-plane-api/openapi.yaml)
+Full spec: [`../src/services/control-plane-api/openapi.yaml`](../src/services/control-plane-api/openapi.yaml)
 
 ### Web Application (`src/services/control-plane-web`)
 
