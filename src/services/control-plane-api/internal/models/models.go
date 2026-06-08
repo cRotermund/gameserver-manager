@@ -1,4 +1,4 @@
-package apimodels
+package models
 
 import "time"
 
@@ -18,7 +18,7 @@ type HardwareSpecs struct {
 }
 
 type ServerSummary struct {
-	ServerID string        `json:"server_id"`
+	ServerId string        `json:"server_id"`
 	Name     string        `json:"name"`
 	Game     string        `json:"game"`
 	Specs    HardwareSpecs `json:"specs"`
@@ -65,9 +65,9 @@ const (
 )
 
 type Operation struct {
-	OperationID string          `json:"operation_id"`
+	OperationId string          `json:"operation_id"`
 	Type        OperationType   `json:"type"`
-	ServerID    string          `json:"server_id"`
+	ServerId    string          `json:"server_id"`
 	Status      OperationStatus `json:"status"`
 	CreatedAt   time.Time       `json:"created_at"`
 	CompletedAt *time.Time      `json:"completed_at,omitempty"`
