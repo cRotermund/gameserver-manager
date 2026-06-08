@@ -3,12 +3,12 @@ package config
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"strconv"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/cRotermund/gameserver-manager/src/services/control-plane-api/internal/logging"
 	"github.com/joho/godotenv"
 )
 
@@ -26,39 +26,39 @@ type ControlPlaneConfig struct {
 	AWS                      aws.Config
 }
 
-func Load() (*ControlPlaneConfig, error) {
+func Load(logger *slog.Logger) (*ControlPlaneConfig, error) {
 	var cfg ControlPlaneConfig
 
-	err := initEnv()
+	err := initEnv(logger)
 	if err != nil {
 		return nil, err
 	}
 
-	p, err := loadRequiredEnvAsInt(EnvPort)
+	p, err := loadRequiredEnvAsInt(EnvPort, logger)
 	if err != nil {
 		return nil, err
 	}
 	cfg.Port = *p
 
-	isServerTag, err := loadRequiredEnvAsString(EnvGsmIsServerTagKey)
+	isServerTag, err := loadRequiredEnvAsString(EnvGsmIsServerTagKey, logger)
 	if err != nil {
 		return nil, err
 	}
 	cfg.IsServerAwsTagName = *isServerTag
 
-	serverNameTag, err := loadRequiredEnvAsString(EnvGsmServerNameTagKey)
+	serverNameTag, err := loadRequiredEnvAsString(EnvGsmServerNameTagKey, logger)
 	if err != nil {
 		return nil, err
 	}
 	cfg.ServerNameAwsTagName = *serverNameTag
 
-	descriptorTagName, err := loadRequiredEnvAsString(EnvGsmGameDescriptorTagKey)
+	descriptorTagName, err := loadRequiredEnvAsString(EnvGsmGameDescriptorTagKey, logger)
 	if err != nil {
 		return nil, err
 	}
 	cfg.GameDescriptorAwsTagName = *descriptorTagName
 
-	awsCfg, err := loadAwsConfig()
+	awsCfg, err := loadAwsConfig(logger)
 	if err != nil {
 		return nil, err
 	}
@@ -69,47 +69,50 @@ func Load() (*ControlPlaneConfig, error) {
 	return &cfg, nil
 }
 
-func initEnv() error {
+func initEnv(logger *slog.Logger) error {
 	err := godotenv.Load()
 
 	if err != nil {
-		logging.FailedEnvInit(err)
+		logger.Error("Unable to load AWS configuration files", "Error", err)
 		return err
 	}
 
 	return nil
 }
 
-func loadRequiredEnvAsString(v string) (*string, error) {
+func loadRequiredEnvAsString(v string, logger *slog.Logger) (*string, error) {
 	output := os.Getenv(v)
 
 	if output == "" {
-		logging.MissingEnv(v)
+		logger.Error("Required environment variable is missing", "VariableName", v)
 		return nil, errors.New("Required environment variable is not populated")
 	}
 
 	return &output, nil
 }
 
-func loadRequiredEnvAsInt(v string) (*int, error) {
+func loadRequiredEnvAsInt(v string, logger *slog.Logger) (*int, error) {
 	output := os.Getenv(v)
 
 	if output == "" {
-		logging.MissingEnv(v)
+		logger.Error("Required environment variable is missing", "VariableName", v)
 		return nil, errors.New("Required environment variable is not populated")
 	}
 
 	portNum, err := strconv.Atoi(output)
 
 	if err != nil {
-		logging.MalformedIntEnv(v, output)
+		logger.Error(
+			"Could not parse required environment variable as integer",
+			"VariableName", v,
+			"VariableValue", output)
 		return nil, err
 	}
 
 	return &portNum, nil
 }
 
-func loadAwsConfig() (*aws.Config, error) {
+func loadAwsConfig(logger *slog.Logger) (*aws.Config, error) {
 
 	awscfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithSharedConfigFiles([]string{"./aws-config.toml"}),
@@ -118,7 +121,7 @@ func loadAwsConfig() (*aws.Config, error) {
 	)
 
 	if err != nil {
-		logging.MissingAwsConfig(err)
+		logger.Error("Unable to load AWS configuration files", "Error", err)
 		return nil, err
 	}
 

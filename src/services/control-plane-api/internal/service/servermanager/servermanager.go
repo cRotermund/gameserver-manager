@@ -2,6 +2,7 @@ package servermanager
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -9,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
-	"github.com/cRotermund/gameserver-manager/src/services/control-plane-api/internal/logging"
+	"github.com/cRotermund/gameserver-manager/src/services/control-plane-api/internal/middleware"
 	"github.com/cRotermund/gameserver-manager/src/services/control-plane-api/internal/models"
 	"github.com/google/uuid"
 )
@@ -26,6 +27,8 @@ const (
 )
 
 func (s *service) ListServers(ctx context.Context) ([]models.ServerSummary, error) {
+	logger := middleware.LoggerFromContext(ctx)
+
 	// The filter "name" prefix controls the filter "subject" (e.g. tag:*)
 	var tagFilterBuilder strings.Builder
 	tagFilterBuilder.WriteString("tag:")
@@ -49,7 +52,8 @@ func (s *service) ListServers(ctx context.Context) ([]models.ServerSummary, erro
 		page, err := instPaginator.NextPage(ctx)
 
 		if err != nil {
-			return nil, fmt.Errorf("failed to describe instances on page: %w", err)
+			logger.Error("Failed to describe instances on page", "error", err)
+			return nil, errors.New("failed to describe instances on page")
 		}
 
 		for _, reservation := range page.Reservations {
@@ -67,7 +71,6 @@ func (s *service) GetServer(ctx context.Context, serverId string) (*models.Serve
 	summary, err := s.getInstanceById(ctx, serverId)
 
 	if err != nil {
-		logging.GetInstanceDetailsError(serverId, err)
 		return nil, err
 	}
 
@@ -81,10 +84,11 @@ func (s *service) GetServer(ctx context.Context, serverId string) (*models.Serve
 }
 
 func (s *service) StartServer(ctx context.Context, serverId string) (*models.Operation, error) {
+	logger := middleware.LoggerFromContext(ctx).With("serverId", serverId)
+
 	_, err := s.getInstanceById(ctx, serverId)
 
 	if err != nil {
-		logging.StartInstanceActionError(serverId, nil, err)
 		return nil, err
 	}
 
@@ -95,20 +99,21 @@ func (s *service) StartServer(ctx context.Context, serverId string) (*models.Ope
 	_, err = s.ec2.StartInstances(ctx, input)
 
 	if err != nil {
-		logging.StartInstanceActionError(serverId, input, err)
+		logger.Error("Error starting instance", "input", input, "error", err)
 		return nil, err
 	}
 
-	op := operationFromAction(serverId, models.OperationType("stop"))
+	op := operationFromAction(serverId, models.OperationType("start"))
 
 	return &op, nil
 }
 
 func (s *service) StopServer(ctx context.Context, serverId string) (*models.Operation, error) {
+	logger := middleware.LoggerFromContext(ctx).With("serverId", serverId)
+
 	_, err := s.getInstanceById(ctx, serverId)
 
 	if err != nil {
-		logging.StopInstanceActionError(serverId, nil, err)
 		return nil, err
 	}
 
@@ -119,7 +124,7 @@ func (s *service) StopServer(ctx context.Context, serverId string) (*models.Oper
 	_, err = s.ec2.StopInstances(ctx, input)
 
 	if err != nil {
-		logging.StopInstanceActionError(serverId, input, err)
+		logger.Error("Error stopping instance", "input", input, "error", err)
 		return nil, err
 	}
 
@@ -129,10 +134,11 @@ func (s *service) StopServer(ctx context.Context, serverId string) (*models.Oper
 }
 
 func (s *service) RebootServer(ctx context.Context, serverId string) (*models.Operation, error) {
+	logger := middleware.LoggerFromContext(ctx).With("serverId", serverId)
+
 	_, err := s.getInstanceById(ctx, serverId)
 
 	if err != nil {
-		logging.RebootInstanceActionError(serverId, nil, err)
 		return nil, err
 	}
 
@@ -143,7 +149,7 @@ func (s *service) RebootServer(ctx context.Context, serverId string) (*models.Op
 	_, err = s.ec2.RebootInstances(ctx, input)
 
 	if err != nil {
-		logging.RebootInstanceActionError(serverId, input, err)
+		logger.Error("Error rebooting instance", "input", input, "error", err)
 		return nil, err
 	}
 
@@ -159,14 +165,16 @@ func (s *service) GetOperation(ctx context.Context, operationId string) (*models
 	return &fakeOp, nil
 }
 
-func (s *service) getInstanceById(ctx context.Context, instanceId string) (*models.ServerSummary, error) {
+func (s *service) getInstanceById(ctx context.Context, serverId string) (*models.ServerSummary, error) {
+	logger := middleware.LoggerFromContext(ctx).With("serverId", serverId)
+
 	input := &ec2.DescribeInstancesInput{
-		InstanceIds: []string{instanceId},
+		InstanceIds: []string{serverId},
 	}
 
 	output, err := s.ec2.DescribeInstances(ctx, input)
 	if err != nil {
-		logging.DescribeInstanceError(input, err)
+		logger.Error("Error describing instances", "Error", err, "Input", input)
 		return nil, err
 	}
 
