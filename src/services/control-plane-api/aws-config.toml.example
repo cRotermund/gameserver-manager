@@ -1,0 +1,4 @@
+[profile control-plane-app]
+region = "us-east-1"
+role_arn = "the-role-to-assume"
+source_profile = "control-plane-user"

@@ -10,6 +10,8 @@ bot-secret.env
 *.key
 certs/
 secrets/
+aws-credentials.toml
+aws-config.toml
 
 # ==========================================
 # Operating System Files
