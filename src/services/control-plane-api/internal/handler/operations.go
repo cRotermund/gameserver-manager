@@ -15,8 +15,7 @@ func StartServer(svc servermanager.Service) http.HandlerFunc {
 		op, err := svc.StartServer(ctx, serverId)
 
 		if err != nil {
-			apiErr := ServerStateOperationError("start", err)
-			SendServerError(w, r, apiErr, err)
+			SendServerError(w, r, err)
 			return
 		}
 
@@ -33,8 +32,7 @@ func StopServer(svc servermanager.Service) http.HandlerFunc {
 		op, err := svc.StopServer(ctx, serverId)
 
 		if err != nil {
-			apiErr := ServerStateOperationError("stop", err)
-			SendServerError(w, r, apiErr, err)
+			SendServerError(w, r, err)
 			return
 		}
 
@@ -51,8 +49,7 @@ func RebootServer(svc servermanager.Service) http.HandlerFunc {
 		op, err := svc.RebootServer(ctx, serverId)
 
 		if err != nil {
-			apiErr := ServerStateOperationError("reboot", err)
-			SendServerError(w, r, apiErr, err)
+			SendServerError(w, r, err)
 			return
 		}
 

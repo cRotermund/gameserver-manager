@@ -21,5 +21,31 @@ spec:
           ports:
             - containerPort: 8080
           env:
+            # -- SERVER CONFIGURATION --
             - name: PORT
               value: "8080"
+            # -- GSM FUNCTION CONFIGURATION -- 
+            - name: GAMESERVER_ISSERVER_TAG_KEY
+              value: "IsGameServer"
+            - name: GAMESERVER_NAME_TAG_KEY
+              value: "Name"
+            - name: GAMESERVER_DESCRIPTOR_TAG_KEY
+              value: "Game"
+            # -- AWS CONFIGURATION --
+            - name: AWS_REGION
+              value: "us-east-1"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: control-plane-api-secret
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: control-plane-api-secret
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: AWS_ROLE_ARN
+              valueFrom:
+                secretKeyRef:
+                  name: control-plane-api-secret
+                  key: AWS_ROLE_ARN

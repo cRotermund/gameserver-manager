@@ -3,13 +3,14 @@ package servermanager
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/smithy-go"
+	interrs "github.com/cRotermund/gameserver-manager/src/services/control-plane-api/internal/errors"
 	"github.com/cRotermund/gameserver-manager/src/services/control-plane-api/internal/middleware"
 	"github.com/cRotermund/gameserver-manager/src/services/control-plane-api/internal/models"
 	"github.com/google/uuid"
@@ -53,7 +54,7 @@ func (s *service) ListServers(ctx context.Context) ([]models.ServerSummary, erro
 
 		if err != nil {
 			logger.Error("Failed to describe instances on page", "error", err)
-			return nil, errors.New("failed to describe instances on page")
+			return nil, s.mapAwsError(err)
 		}
 
 		for _, reservation := range page.Reservations {
@@ -89,6 +90,7 @@ func (s *service) StartServer(ctx context.Context, serverId string) (*models.Ope
 	_, err := s.getInstanceById(ctx, serverId)
 
 	if err != nil {
+		//already wrapped
 		return nil, err
 	}
 
@@ -100,7 +102,7 @@ func (s *service) StartServer(ctx context.Context, serverId string) (*models.Ope
 
 	if err != nil {
 		logger.Error("Error starting instance", "input", input, "error", err)
-		return nil, err
+		return nil, s.mapAwsError(err)
 	}
 
 	op := operationFromAction(serverId, models.OperationType("start"))
@@ -114,6 +116,7 @@ func (s *service) StopServer(ctx context.Context, serverId string) (*models.Oper
 	_, err := s.getInstanceById(ctx, serverId)
 
 	if err != nil {
+		//already wrapped
 		return nil, err
 	}
 
@@ -125,7 +128,7 @@ func (s *service) StopServer(ctx context.Context, serverId string) (*models.Oper
 
 	if err != nil {
 		logger.Error("Error stopping instance", "input", input, "error", err)
-		return nil, err
+		return nil, s.mapAwsError(err)
 	}
 
 	op := operationFromAction(serverId, models.OperationType("stop"))
@@ -139,6 +142,7 @@ func (s *service) RebootServer(ctx context.Context, serverId string) (*models.Op
 	_, err := s.getInstanceById(ctx, serverId)
 
 	if err != nil {
+		//error already wrapped.
 		return nil, err
 	}
 
@@ -150,7 +154,7 @@ func (s *service) RebootServer(ctx context.Context, serverId string) (*models.Op
 
 	if err != nil {
 		logger.Error("Error rebooting instance", "input", input, "error", err)
-		return nil, err
+		return nil, s.mapAwsError(err)
 	}
 
 	op := operationFromAction(serverId, models.OperationType("reboot"))
@@ -175,11 +179,11 @@ func (s *service) getInstanceById(ctx context.Context, serverId string) (*models
 	output, err := s.ec2.DescribeInstances(ctx, input)
 	if err != nil {
 		logger.Error("Error describing instances", "Error", err, "Input", input)
-		return nil, err
+		return nil, s.mapAwsError(err)
 	}
 
 	if len(output.Reservations) == 0 || len(output.Reservations[0].Instances) == 0 {
-		return nil, fmt.Errorf("Server instance not found")
+		return nil, interrs.ErrServerNotFound
 	}
 
 	instance := output.Reservations[0].Instances[0]
@@ -232,4 +236,20 @@ func operationFromAction(serverId string, oType models.OperationType) models.Ope
 		CompletedAt: nil,
 		Error:       nil,
 	}
+}
+
+func (s *service) mapAwsError(err error) error {
+	var apiErr smithy.APIError
+
+	if errors.As(err, &apiErr) {
+		switch apiErr.ErrorCode() {
+		case "InvalidInstanceID.NotFound", "InvalidInstanceID.Malformed":
+			return interrs.ErrServerNotFound
+		case "IncorrectInstanceState":
+			return interrs.ErrStateTransition
+		}
+	}
+
+	//Unknown err type, just pass it through.
+	return err
 }

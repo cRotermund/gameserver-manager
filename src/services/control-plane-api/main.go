@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -19,13 +18,19 @@ import (
 const ServerStartError string = "Could not start server."
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	loglevel := config.LogLevelFromEnv()
+
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: loglevel,
+	}))
+
 	slog.SetDefault(logger)
 
 	cfg, err := config.Load(logger)
 
 	if err != nil {
-		log.Fatal(ServerStartError)
+		slog.Error(ServerStartError)
+		os.Exit(1)
 	}
 
 	ec2 := ec2.NewFromConfig(cfg.AWS)
@@ -52,6 +57,6 @@ func main() {
 
 	if err := http.ListenAndServe(":"+strconv.Itoa(cfg.Port), r); err != nil {
 		logger.Error("Error listening and serving http", "error", err)
-		log.Fatalf("server error: %v", err)
+		os.Exit(1)
 	}
 }

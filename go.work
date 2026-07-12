@@ -1,0 +1,6 @@
+go 1.25.0
+
+use (
+	./harness
+	./src/services/control-plane-api
+)

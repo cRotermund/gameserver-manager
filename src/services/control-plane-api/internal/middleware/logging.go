@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"time"
 
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 )
@@ -13,6 +14,9 @@ type loggerKey struct{}
 func Logger(logger *slog.Logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			wrapped := chimiddleware.NewWrapResponseWriter(w, r.ProtoMajor)
+
 			logger := logger.With(
 				"requestId", chimiddleware.GetReqID(r.Context()),
 				"method", r.Method,
@@ -21,6 +25,11 @@ func Logger(logger *slog.Logger) func(next http.Handler) http.Handler {
 
 			ctx := context.WithValue(r.Context(), loggerKey{}, logger)
 			next.ServeHTTP(w, r.WithContext(ctx))
+
+			logger.Info("request",
+				"status", wrapped.Status(),
+				"bytes", wrapped.BytesWritten(),
+				"duration", time.Since(start).String())
 		})
 	}
 }

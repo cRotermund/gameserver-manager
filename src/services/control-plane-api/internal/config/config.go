@@ -6,9 +6,12 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/joho/godotenv"
 )
 
@@ -16,6 +19,7 @@ const EnvPort string = "PORT"
 const EnvGsmIsServerTagKey string = "GAMESERVER_ISSERVER_TAG_KEY"
 const EnvGsmServerNameTagKey string = "GAMESERVER_NAME_TAG_KEY"
 const EnvGsmGameDescriptorTagKey string = "GAMESERVER_DESCRIPTOR_TAG_KEY"
+const EnvLogLevel string = "LOG_LEVEL"
 
 type ControlPlaneConfig struct {
 	Port                     int
@@ -24,6 +28,7 @@ type ControlPlaneConfig struct {
 	GameDescriptorAwsTagName string
 	IsServerAwsTagValue      string
 	AWS                      aws.Config
+	LogLevel                 slog.Level
 }
 
 func Load(logger *slog.Logger) (*ControlPlaneConfig, error) {
@@ -69,12 +74,24 @@ func Load(logger *slog.Logger) (*ControlPlaneConfig, error) {
 	return &cfg, nil
 }
 
+func LogLevelFromEnv() slog.Level {
+	switch strings.ToUpper(os.Getenv(EnvLogLevel)) {
+	case "DEBUG":
+		return slog.LevelDebug
+	case "WARN":
+		return slog.LevelWarn
+	case "ERROR":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
+
 func initEnv(logger *slog.Logger) error {
 	err := godotenv.Load()
 
 	if err != nil {
-		logger.Error("Unable to load AWS configuration files", "Error", err)
-		return err
+		logger.Warn("No .env file found, using existing environment", "Error", err)
 	}
 
 	return nil
@@ -113,17 +130,18 @@ func loadRequiredEnvAsInt(v string, logger *slog.Logger) (*int, error) {
 }
 
 func loadAwsConfig(logger *slog.Logger) (*aws.Config, error) {
-
-	awscfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithSharedConfigFiles([]string{"./aws-config.toml"}),
-		config.WithSharedCredentialsFiles([]string{"./aws-credentials.toml"}),
-		config.WithSharedConfigProfile("control-plane-app"),
-	)
-
+	cfg, err := config.LoadDefaultConfig(context.TODO())
 	if err != nil {
-		logger.Error("Unable to load AWS configuration files", "Error", err)
+		logger.Error("Unable to load AWS configuration", "Error", err)
 		return nil, err
 	}
 
-	return &awscfg, nil
+	if roleARN := os.Getenv("AWS_ROLE_ARN"); roleARN != "" {
+		stsClient := sts.NewFromConfig(cfg)
+		cfg.Credentials = aws.NewCredentialsCache(
+			stscreds.NewAssumeRoleProvider(stsClient, roleARN),
+		)
+	}
+
+	return &cfg, nil
 }
