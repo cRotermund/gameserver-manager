@@ -1,0 +1,8 @@
+.env
+.env.example
+*.toml
+*.toml.example
+*.exe
+Dockerfile
+README.md
+openapi.yaml

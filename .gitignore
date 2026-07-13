@@ -2,6 +2,7 @@
 # Environment Variables & Secrets (CRITICAL)
 # ==========================================
 .env
+*.env
 .env.*
 !.env.example
 bot.env
@@ -10,6 +11,8 @@ bot-secret.env
 *.key
 certs/
 secrets/
+aws-credentials.toml
+aws-config.toml
 
 # ==========================================
 # Operating System Files

@@ -9,7 +9,7 @@ As an API consumer I must be able to...
 * Start and stop a server, and understand when that operation has completed
 * Reboot the server without instance recycle (quick reboot)
 * Retrieve the detailed operating state of a particular server
-   *  IP address 
+   * IP address 
    * Connected clients
    * CPU
    * Memory
