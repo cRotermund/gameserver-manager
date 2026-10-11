@@ -1,6 +1,6 @@
 # Control Plane REST API
 
-The backbone of the Game Server Manager. All server state mutations and queries flow through this API.
+The Go control-plane API for querying and changing managed AWS game servers.
 
 ## Quick start
 
@@ -14,7 +14,11 @@ See [CONTRIBUTING.md](../../../CONTRIBUTING.md) for full development environment
 
 Full OpenAPI 3.1 spec: [`openapi.yaml`](./openapi.yaml)
 
-Acceptance criteria: [`acceptance-criteria.md`](./acceptance-criteria.md)
+Acceptance criteria: [`docs/api-acceptance-criteria.md`](../../../docs/api-acceptance-criteria.md)
+
+Current routes are `GET /health`, `GET /v1/servers`,
+`GET /v1/servers/{serverId}`, and `POST` start, stop, and reboot routes under
+`/v1/servers/{serverId}`.
 
 ## Building
 
@@ -26,5 +30,10 @@ CGO_ENABLED=0 go build -o server .
 
 ```sh
 docker build -t control-plane-api .
-docker run -p 8080:8080 control-plane-api
+docker run --env-file <path-to-api.env> -p 8080:8080 control-plane-api
 ```
+
+The container requires `PORT`, `GAMESERVER_ISSERVER_TAG_KEY`,
+`GAMESERVER_NAME_TAG_KEY`, and `GAMESERVER_DESCRIPTOR_TAG_KEY`. It also needs
+AWS SDK credentials and permissions to describe and control the target EC2
+instances. Kubernetes supplies these values through the Deployment and Secret.

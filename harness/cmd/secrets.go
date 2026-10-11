@@ -13,6 +13,7 @@ var (
 	secretsRegion  string
 	secretsProfile string
 	secretsDryRun  bool
+	secretsOnly    []string
 )
 
 var secretsCmd = &cobra.Command{
@@ -38,7 +39,7 @@ func newSecretsSyncCommand(action string, overwrite bool) *cobra.Command {
 			if !filepath.IsAbs(envFile) {
 				envFile = filepath.Join(root, envFile)
 			}
-			parameters, err := harness.LoadProductionSecrets(envFile)
+			parameters, err := harness.LoadProductionSecrets(envFile, secretsOnly)
 			if err != nil {
 				return err
 			}
@@ -59,6 +60,7 @@ func init() {
 		command.Flags().StringVar(&secretsRegion, "region", secretsRegion, "AWS region")
 		command.Flags().StringVar(&secretsProfile, "profile", "", "AWS CLI profile")
 		command.Flags().BoolVar(&secretsDryRun, "dry-run", false, "Validate the env file and print parameter names without writing")
+		command.Flags().StringSliceVar(&secretsOnly, "only", nil, "Only sync these secret variables (repeatable or comma-separated)")
 		secretsCmd.AddCommand(command)
 	}
 	rootCmd.AddCommand(secretsCmd)

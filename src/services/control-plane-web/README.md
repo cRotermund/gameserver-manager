@@ -1,6 +1,7 @@
 # Control Plane Web
 
-Browser-based dashboard for the Game Server Manager. Consumes the REST API.
+TypeScript and Express web service for the Game Server Manager. The current
+implementation exposes a health endpoint; the browser dashboard is planned.
 
 ## Quick start
 
@@ -23,3 +24,5 @@ npm run build
 docker build -t control-plane-web .
 docker run -p 3000:3000 control-plane-web
 ```
+
+The health endpoint is available at `GET /health`.

@@ -4,8 +4,8 @@
 
 Only these technologies are permitted without prior discussion:
 
-- **Go** — backend services
-- **TypeScript** — frontend and Discord bot
+- **TypeScript** — web frontend
+- **Go** — backend services, Discord bot, and deployment harness
 - **AWS** — compute and infrastructure
 - **Docker** — all services must be containerized
 - **Kubernetes** — deployment target
@@ -21,14 +21,13 @@ Install these before you start. Versions listed are the minimum required.
 
 | Tool       | Version    | Install Link                                          | Required For        |
 | ---------- | ---------- | ----------------------------------------------------- | ------------------- |
-| Go         | >= 1.24    | [go.dev/dl](https://go.dev/dl/)                       | API service         |
-| Node.js    | >= 22      | [nodejs.org](https://nodejs.org/)                     | Web, Discord bot    |
-| Python     | >= 3.10    | [python.org](https://www.python.org/downloads/)       | `deploy` harness + `pip install -e .` |
+| Go         | >= 1.26    | [go.dev/dl](https://go.dev/dl/)                       | API, bot, harness   |
+| Node.js    | >= 22      | [nodejs.org](https://nodejs.org/)                     | Web service         |
 | Docker     | latest     | See container runtime notes below                     | Container builds    |
 | kubectl    | latest     | [kubernetes.io](https://kubernetes.io/docs/tasks/tools/) | K8s deployments  |
 | kustomize  | latest     | [kustomize.io](https://kustomize.io/)                 | K8s configuration   |
 
-**If you only need Path A (true local development),** Go and Node.js are enough. Docker, kubectl, kustomize, and Python are only needed for the container-based workflow.
+**If you only need Path A (true local development),** Go and Node.js are enough. Docker, kubectl, and kustomize are only needed for the container-based workflow.
 
 For system design and architecture, see [docs/architecture.md](docs/architecture.md). For a concrete, step-by-step walkthrough of a known-working local setup (Podman + Minikube on Windows), see [docs/local-dev.md](docs/local-dev.md).
 
@@ -37,16 +36,12 @@ Clone the repo:
 ```sh
 git clone https://github.com/cRotermund/gameserver-manager.git
 cd gameserver-manager
-pip install -e .
+./harness.sh --help
 ```
 
-If `pip` warns that the scripts directory is not on PATH, the `deploy` command won't be found. Add the reported directory to your PATH, or use `python -m harness.cli` as a fallback (all examples below work with either approach).
-
-Verify with:
-
-```sh
-deploy --help
-```
+The harness is a Go CLI invoked through `harness.sh`, which runs it from the
+`harness` module. On Windows, use Git Bash or run the equivalent command with
+`go run ./harness --help` from the repository root.
 
 ### Two Development Workflows
 
@@ -63,7 +58,9 @@ cd src/services/control-plane-api
 go run .                              # listens on :8080
 ```
 
-The API reads `PORT` from the environment (defaults to `8080`). Set it if you need a different port:
+The API requires `PORT`, `GAMESERVER_ISSERVER_TAG_KEY`,
+`GAMESERVER_NAME_TAG_KEY`, and `GAMESERVER_DESCRIPTOR_TAG_KEY`, plus AWS SDK
+credentials. `PORT` is normally `8080`; set it differently if needed:
 
 ```sh
 PORT=9090 go run .
@@ -79,12 +76,11 @@ npm run dev                           # listens on :3000
 
 `npm run dev` uses `tsx` for hot-reload during development. Use `npm run build && npm start` for a production-like run.
 
-**Discord bot (TypeScript)**
+**Discord bot (Go)**
 
 ```sh
 cd src/discord/control-bot
-npm install
-DISCORD_TOKEN=<your-token> npm run dev
+DISCORD_TOKEN=<your-token> go run .
 ```
 
 The bot requires a Discord application token. Create one at the [Discord Developer Portal](https://discord.com/developers/applications). Without a valid token the bot will exit immediately.
@@ -103,7 +99,7 @@ Most IDEs can run these commands as launch configurations:
 
 Matches the production environment. All commands are issued from the repository root.
 
-The [`deploy`](#) CLI (see [harness/](harness/)) is the single entry point for container-based development.
+The [`harness.sh`](harness.sh) wrapper (see [harness/](harness/)) is the single entry point for container-based development.
 
 **1. Start a local Kubernetes cluster**
 
@@ -127,56 +123,61 @@ kubectl config current-context
 
 ```sh
 # Build all services
-deploy build
+./harness.sh build
 
 # Build a specific service
-deploy build api
+./harness.sh build api
 
 # Custom tag
-deploy build --tag dev
+./harness.sh build --tag dev
 ```
 
-Images are tagged as `localhost/<name>:latest` and automatically loaded into your cluster's image cache (no registry needed).
+Images are tagged as `localhost/<name>:latest`. The harness loads images into
+Minikube and kind when it detects those clusters; Rancher Desktop can use the
+same local container runtime directly.
 
 **3. Set up the Discord bot secret (optional)**
 
 ```sh
-cp infra/k8s/local/bot.env.sample infra/k8s/local/bot.env
-# Edit bot.env with your real token
+cp infra/k8s/local/api.env.example infra/k8s/local/api.env
+cp infra/k8s/local/bot.env.example infra/k8s/local/bot.env
+# Edit both files with the required local values
 ```
 
 **4. Deploy**
 
 ```sh
 # Apply the local overlay
-deploy apply
+./harness.sh apply
 
 # Check that pods are running
 kubectl get pods
 ```
 
-The `local` overlay uses `localhost/`-prefixed images with `IfNotPresent` pull policy, so images are taken from your local Docker daemon directly.
+The `local` overlay uses `localhost/`-prefixed images with `IfNotPresent` pull
+policy. The harness uses whichever compatible container runtime it detects,
+preferring Podman over Docker.
 
 **5. Access the services**
 
 ```sh
 # Port-forward API to localhost:8080
-deploy port-forward api
+./harness.sh port-forward api
 
-# Port-forward web UI to localhost:3000 (in another terminal)
-deploy port-forward web
+# Port-forward web service to localhost:3000 (in another terminal)
+./harness.sh port-forward web
 ```
 
 Custom ports:
 
 ```sh
-deploy port-forward api --local-port 9090
+./harness.sh port-forward api --local-port 9090
 ```
 
 **6. Tear down**
 
 ```sh
-deploy delete
+./harness.sh delete
 ```
 
 ---
@@ -215,8 +216,8 @@ The harness and Dockerfiles work with both. The harness auto-detects whichever i
 
 | Problem                                     | Likely Cause                                                 | Fix                                                           |
 | ------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------- |
-| `deploy: command not found`                 | Python's scripts directory not on PATH after `pip install`.  | Add the directory from the `pip` warning to PATH, or use `python -m harness.cli` instead. |
-| `ErrImagePull` / `ImagePullBackOff`         | Image not available in cluster cache.                        | Run `deploy build` to rebuild into the local daemon. |
+| `harness.sh: not found`                     | Git Bash or another POSIX-compatible shell is unavailable.    | Run `go run ./harness --help` from the repository root, or install Git Bash. |
+| `ErrImagePull` / `ImagePullBackOff`         | Image not available in cluster cache.                        | Run `./harness.sh build` and confirm the active cluster context. |
 | `CrashLoopBackOff` on any pod               | The container exits immediately after starting — could be a code error, missing config, or bad env var. | Check the logs first: `kubectl logs deployment/<name>`. For the bot specifically, a missing `DISCORD_TOKEN` is the most common cause. |
 | `kubectl get pods` shows nothing            | Wrong kubeconfig context.                                    | `kubectl config get-contexts` and switch to your local cluster. |
 | `go run .` fails with "package not found"   | Not running from the service directory.                      | cd into the service directory first.                          |
@@ -328,7 +329,7 @@ src/
 │   └── control-plane-web/      # TypeScript web frontend
 ├── discord/
 │   └── control-bot/            # Discord bot
-harness/                        # Python CLI for building and deploying
+harness/                        # Go CLI for building and deploying
 docs/                           # Architecture and dev guides
 infra/
 └── k8s/

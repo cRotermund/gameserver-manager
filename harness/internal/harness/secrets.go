@@ -19,6 +19,30 @@ type SSMParameter struct {
 	Value string
 }
 
+type productionSecret struct {
+	envKey string
+	name   string
+}
+
+var productionSecrets = []productionSecret{
+	{
+		envKey: "AWS_ACCESS_KEY_ID",
+		name:   "/kubernetes/appsecrets/gameserver-manager/control-plane-api/aws-access-key-id",
+	},
+	{
+		envKey: "AWS_SECRET_ACCESS_KEY",
+		name:   "/kubernetes/appsecrets/gameserver-manager/control-plane-api/aws-secret-access-key",
+	},
+	{
+		envKey: "AWS_ROLE_ARN",
+		name:   "/kubernetes/appsecrets/gameserver-manager/control-plane-api/aws-role-arn",
+	},
+	{
+		envKey: "DISCORD_TOKEN",
+		name:   "/kubernetes/appsecrets/gameserver-manager/control-bot/discord-token",
+	},
+}
+
 type ssmPutParameterInput struct {
 	Name      string `json:"Name"`
 	Type      string `json:"Type"`
@@ -34,40 +58,69 @@ func DefaultAWSRegion() string {
 	return defaultAWSRegion
 }
 
-func LoadProductionSecrets(path string) ([]SSMParameter, error) {
+func LoadProductionSecrets(path string, only []string) ([]SSMParameter, error) {
 	values, err := loadEnvFile(path)
 	if err != nil {
 		return nil, err
 	}
 
-	required := []string{
-		"AWS_ACCESS_KEY_ID",
-		"AWS_SECRET_ACCESS_KEY",
-		"AWS_ROLE_ARN",
-	}
-	for _, key := range required {
-		if strings.TrimSpace(values[key]) == "" {
-			return nil, fmt.Errorf("required variable %q is missing or empty in %s", key, path)
-		}
-		if strings.ContainsAny(values[key], "\r\n") {
-			return nil, fmt.Errorf("variable %q must be a single-line value", key)
-		}
+	selected, err := selectProductionSecrets(only)
+	if err != nil {
+		return nil, err
 	}
 
-	return []SSMParameter{
-		{
-			Name:  "/kubernetes/appsecrets/gameserver-manager/control-plane-api/aws-access-key-id",
-			Value: values["AWS_ACCESS_KEY_ID"],
-		},
-		{
-			Name:  "/kubernetes/appsecrets/gameserver-manager/control-plane-api/aws-secret-access-key",
-			Value: values["AWS_SECRET_ACCESS_KEY"],
-		},
-		{
-			Name:  "/kubernetes/appsecrets/gameserver-manager/control-plane-api/aws-role-arn",
-			Value: values["AWS_ROLE_ARN"],
-		},
-	}, nil
+	parameters := make([]SSMParameter, 0, len(selected))
+	for _, secret := range selected {
+		value := values[secret.envKey]
+		if strings.TrimSpace(value) == "" {
+			return nil, fmt.Errorf("required variable %q is missing or empty in %s", secret.envKey, path)
+		}
+		if strings.ContainsAny(value, "\r\n") {
+			return nil, fmt.Errorf("variable %q must be a single-line value", secret.envKey)
+		}
+		parameters = append(parameters, SSMParameter{Name: secret.name, Value: value})
+	}
+
+	return parameters, nil
+}
+
+func selectProductionSecrets(only []string) ([]productionSecret, error) {
+	if len(only) == 0 {
+		return productionSecrets, nil
+	}
+
+	known := make(map[string]struct{}, len(productionSecrets))
+	for _, secret := range productionSecrets {
+		known[secret.envKey] = struct{}{}
+	}
+
+	requested := make(map[string]struct{}, len(only))
+	for _, value := range only {
+		key := strings.TrimSpace(value)
+		if key == "" {
+			return nil, fmt.Errorf("secret filter must not contain an empty value")
+		}
+		if _, ok := known[key]; !ok {
+			return nil, fmt.Errorf("unknown secret %q; supported values: %s", key, strings.Join(secretKeys(), ", "))
+		}
+		requested[key] = struct{}{}
+	}
+
+	selected := make([]productionSecret, 0, len(requested))
+	for _, secret := range productionSecrets {
+		if _, ok := requested[secret.envKey]; ok {
+			selected = append(selected, secret)
+		}
+	}
+	return selected, nil
+}
+
+func secretKeys() []string {
+	keys := make([]string, 0, len(productionSecrets))
+	for _, secret := range productionSecrets {
+		keys = append(keys, secret.envKey)
+	}
+	return keys
 }
 
 func PutSSMParameters(parameters []SSMParameter, region, profile string, overwrite, dryRun bool) error {

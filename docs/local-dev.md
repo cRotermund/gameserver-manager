@@ -43,12 +43,13 @@ choco install docker-cli -y
 # Languages and runtimes
 choco install golang -y
 choco install nodejs -y
-choco install python -y
 ```
 
 `choco install` prompts for confirmation on each package; `-y` skips the prompts.
 
-**kustomize** is bundled with `kubernetes-cli` (kubectl >= 1.14). If your version doesn't include it, run `choco install kustomize -y`.
+Install standalone **kustomize** if you want to render manifests directly. The
+harness uses it when available and falls back to `kubectl apply -k` or
+`kubectl delete -k` when it is not installed.
 
 ### 4. Alias Docker CLI to Podman
 
@@ -79,7 +80,6 @@ kubectl version --client
 kustomize version
 go version
 node --version
-python --version
 ```
 
 ## Initialize Minikube with Podman
@@ -101,21 +101,16 @@ After the cluster is running, install the **Kubernetes** extension in Podman Des
 ```powershell
 git clone https://github.com/cRotermund/gameserver-manager.git
 cd gameserver-manager
-pip install -e .
+go run ./harness --help
 ```
 
-If `pip` warns that the scripts directory is not on PATH, the `deploy` command won't be found. Add the reported directory to your PATH, or use `python -m harness.cli` as a fallback (all examples below work with either approach).
-
-Verify with:
-
-```powershell
-deploy --help
-```
+The repository harness is a Go CLI. The `harness.sh` wrapper is also
+available from Git Bash: `./harness.sh --help`.
 
 Build all service images. The harness auto-detects Podman and Minikube, handles image loading into the cluster automatically.
 
 ```powershell
-deploy build
+go run ./harness build
 ```
 
 Expected output:
@@ -131,21 +126,24 @@ Expected output:
 >>> podman build -t localhost/control-bot:latest src\discord\control-bot
 ```
 
-## Set Up the Discord Bot (Optional)
+## Set Up Local Secrets
 
-If you want the bot to run:
+The local overlay requires both environment files. The bot token is only
+needed if you want the bot to connect to Discord.
 
 ```powershell
-Copy-Item infra\k8s\local\bot.env.sample infra\k8s\local\bot.env
-# Edit infra\k8s\local\bot.env and replace with your real token
+Copy-Item infra\k8s\local\api.env.example infra\k8s\local\api.env
+Copy-Item infra\k8s\local\bot.env.example infra\k8s\local\bot.env
+# Edit both files with the required local values
 ```
 
-If you skip this, the bot pod will crash-loop. That's fine for API+Web development.
+If you skip `bot.env`, the bot pod will crash-loop. The API environment file is
+required for the API pod to start.
 
 ## Deploy
 
 ```powershell
-deploy apply
+go run ./harness apply
 ```
 
 Check that pods are running:
@@ -160,6 +158,7 @@ Expected output:
 NAME                                 READY   STATUS    RESTARTS   AGE
 control-plane-api-xxxxxxxxxx-xxxxx   1/1     Running   0          30s
 control-plane-web-xxxxxxxxxx-xxxxx   1/1     Running   0          30s
+control-bot-xxxxxxxxxx-xxxxx         1/1     Running   0          30s
 ```
 
 (The bot may show `CrashLoopBackOff` if you skipped the token step.)
@@ -170,11 +169,11 @@ In separate terminals:
 
 ```powershell
 # Terminal 1 — API
-deploy port-forward api
+go run ./harness port-forward api
 # API available at http://localhost:8080
 
 # Terminal 2 — Web UI
-deploy port-forward web
+go run ./harness port-forward web
 # Web UI available at http://localhost:3000
 ```
 
@@ -189,6 +188,11 @@ curl http://localhost:8080/health
 
 For debugging and stepping through code without Kubernetes:
 
+The API requires `PORT`, the three `GAMESERVER_*` tag-name variables, and AWS
+credentials. The Kubernetes deployment provides these values through its
+manifest and Secret; set them in your shell or a local `.env` file for direct
+execution.
+
 ```powershell
 # Terminal 1 — API
 cd src\services\control-plane-api
@@ -201,16 +205,15 @@ npm run dev
 
 # Terminal 3 — Bot (optional)
 cd src\discord\control-bot
-npm install
 $env:DISCORD_TOKEN = "your-token"
-npm run dev
+go run .
 ```
 
 ## Tear Down
 
 ```powershell
 # Remove deployments from the cluster
-deploy delete
+go run ./harness delete
 
 # Stop Minikube (preserves state for next session)
 minikube stop
@@ -243,7 +246,7 @@ cd gameserver-manager
 # Then run podman and minikube from WSL as well
 ```
 
-### `deploy build` fails: "Neither podman nor docker"
+### `harness build` fails: "Neither podman nor docker"
 
 The harness can't find a container runtime on your PATH. Ensure Podman Desktop is running and `podman` is available:
 
@@ -259,8 +262,8 @@ The harness should have loaded images into Minikube automatically. If you still 
 
 ```powershell
 kubectl config use-context minikube
-deploy build
-deploy apply
+go run ./harness build
+go run ./harness apply
 ```
 
 ### Port already in use
@@ -268,7 +271,7 @@ deploy apply
 If port 8080 or 3000 is occupied, use a custom local port:
 
 ```powershell
-deploy port-forward api --local-port 9090
+go run ./harness port-forward api --local-port 9090
 # Then access the API at http://localhost:9090
 ```
 
