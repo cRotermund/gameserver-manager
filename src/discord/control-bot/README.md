@@ -1,15 +1,25 @@
 # Discord Control Bot
 
-Chat-based interface for managing game servers via Discord.
+Minimal Go Discord bot for the Game Server Manager. The current implementation
+responds to messages that mention the bot with a hello-world message.
 
-## Quick start
+## Quick Start
+
+Set `DISCORD_TOKEN` and run the Go module:
 
 ```sh
-npm install
-DISCORD_TOKEN=<your-token> npm run dev
+DISCORD_TOKEN=<your-token> go run .
 ```
 
-Create a token at the [Discord Developer Portal](https://discord.com/developers/applications). See [CONTRIBUTING.md](../../../CONTRIBUTING.md) for full development environment setup, including the container-based workflow with Kubernetes.
+The bot also loads a `.env` file from its working directory. Create a token at
+the [Discord Developer Portal](https://discord.com/developers/applications).
+Never commit a real token.
+
+## Build
+
+```sh
+go build -o control-bot .
+```
 
 ## Docker
 
@@ -17,3 +27,5 @@ Create a token at the [Discord Developer Portal](https://discord.com/developers/
 docker build -t control-bot .
 docker run -e DISCORD_TOKEN=<your-token> control-bot
 ```
+
+The Dockerfile produces a static Linux binary in a non-root distroless image.

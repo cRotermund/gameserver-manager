@@ -4,7 +4,7 @@
 
 Game Server Manager is a three-tier system for managing AWS game servers without console access. Users interact via a **web app** or **Discord bot**, both of which talk to a central **REST API** that orchestrates AWS resources.
 
-The project is early-stage. Design docs and API specs exist, but most service code has not been written yet. You are helping build this system from the ground up.
+The project is early-stage. The API, web health service, Discord bot, deployment harness, and Kubernetes manifests exist, while broader product capabilities remain under development.
 
 ## Tech Stack (Non-Negotiable)
 
@@ -12,6 +12,8 @@ The project is early-stage. Design docs and API specs exist, but most service co
 | ------------- | ----------------------------- |
 | Backend       | Go (Dockerized, distroless)   |
 | Frontend      | TypeScript                    |
+| Discord Bot   | Go                            |
+| Harness       | Go                            |
 | Infra         | AWS (EC2/ECS)                 |
 | Deployment    | Kubernetes + Kustomize        |
 | CI/CD         | GitHub Actions, GHCR          |
@@ -72,7 +74,7 @@ The REST API is the single source of truth. When extending it:
 - Keep infrastructure declarative (Kustomize overlays in `infra/k8s/`)
 - Update the OpenAPI spec when API endpoints change
 - Write tests alongside implementation code
-- Respect the acceptance criteria in `src/services/control-plane-api/acceptance-criteria.md`
+- Respect the acceptance criteria in `docs/api-acceptance-criteria.md`
 
 ## What NOT to Do
 

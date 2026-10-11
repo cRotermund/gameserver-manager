@@ -1,156 +1,105 @@
 # Architecture
 
-## Overview
+## Current System
 
-Game Server Manager follows a three-tier architecture:
+The repository currently contains three services and a Go deployment harness:
 
-1. **Control Plane REST API** — the single source of truth for server state and operations
-2. **Web Application** — a browser-based dashboard for management and observability
-3. **Discord Bot** — a chat-based interface for quick, convenient control
+1. **Control-plane API** - Go HTTP service exposing the initial AWS EC2 server-control routes.
+2. **Web service** - TypeScript and Express service exposing `/health`.
+3. **Discord bot** - Go service that responds to messages mentioning the bot.
+4. **Harness** - Go CLI for building images and applying Kustomize overlays.
 
-```
-┌─────────────────────────────────────────────────────┐
-│                     Users / Friends                   │
-└──────────┬──────────────────────┬────────────────────┘
-           │                      │
-     ┌─────▼─────┐          ┌─────▼─────┐
-     │  Web App   │          │ Discord   │
-     │ (Browser)  │          │  Bot      │
-     └─────┬──────┘          └─────┬─────┘
-           │                      │
-           └──────────┬───────────┘
-                      │ HTTPS (OAuth2)
-              ┌───────▼────────┐
-              │   REST API     │
-              │   (Go, K8s)    │
-              └───┬────────────┘
-                  │
-      ┌───────────┼───────────┐
-      │           │           │
- ┌────▼────┐ ┌────▼────┐ ┌────▼────┐
- │  AWS    │ │ Prom/Graf│ │  oTel   │
- │EC2/ECS  │ │  ana     │ │Collector│
- └─────────┘ └─────────┘ └─────────┘
-```
-
-## Primary Motivation
-
-Extremely cheap to run — ideally free-tier or near-zero cost — on top of pre-existing Kubernetes infrastructure.
-
-## Subsystems
-
-### REST API (`src/services/control-plane-api`)
-
-The backbone of the system. All state mutations and queries flow through the API.
-
-- **Language:** Go, compiled to a static binary, running in a distroless Docker container
-- **Auth:** OAuth2 client credentials with scoped access (`control:ro`, `control:rw`, `observability:ro`)
-- **API style:** RESTful, versioned under `/v1`, documented with OpenAPI 3.1
-- **Async operations:** Start/stop/reboot return `202 Accepted` with an operation resource that can be polled via `/operations/{id}`
-- **Caching:** Conditional requests with `ETag` and `Cache-Control` — cheap endpoints cached longer, in-progress operations cached briefly
-
-#### Key Endpoints
-
-| Method | Path                           | Scope            | Description                    |
-| ------ | ------------------------------ | ---------------- | ------------------------------ |
-| GET    | `/v1/servers`                  | `control:ro`     | List all managed servers       |
-| GET    | `/v1/servers/{id}`             | `control:ro`     | Server detail + resource usage |
-| GET    | `/v1/servers/{id}/processes`   | `control:ro`     | Running process table          |
-| POST   | `/v1/servers/{id}/start`       | `control:rw`     | Start a server (async)         |
-| POST   | `/v1/servers/{id}/stop`        | `control:rw`     | Stop a server (async)          |
-| POST   | `/v1/servers/{id}/reboot`      | `control:rw`     | Quick OS reboot (async)        |
-| GET    | `/v1/operations/{id}`          | `control:ro`     | Poll operation status          |
-
-Full spec: [`../src/services/control-plane-api/openapi.yaml`](../src/services/control-plane-api/openapi.yaml)
-
-### Web Application (`src/services/control-plane-web`)
-
-A browser-based UI built in TypeScript that consumes the REST API.
-
-- **Server management:** List servers, view status, issue start/stop/reboot
-- **Observability dashboard:** CPU, memory, disk, network, connected clients
-- **API health monitor:** Simple availability indicator for the control plane itself
-- **Auth:** Handles OAuth2 flow and token management transparently for the user
-
-### Discord Bot (`src/discord/control-bot`)
-
-A lightweight chat interface for Discord servers.
-
-- **Commands:** `!start`, `!stop`, `!status` (exact set TBD)
-- **Auth:** Uses a service account with OAuth2 client credentials
-- **Future:** In-memory semantic analysis for natural-language command interpretation (experimental)
-
-### Observability
-
-- **OpenTelemetry:** Distributed tracing across API, web, and bot
-- **Prometheus:** Scrapes metrics endpoints from all services
-- **Grafana:** Dashboards for system health, server telemetry, and operational metrics
-
-## Data Flow
-
-### Control Operations (Start / Stop / Reboot)
+The intended long-term interaction model is:
 
 ```
-Client ──POST /v1/servers/{id}/start──► API
-                                          │
-                                          ├── Validate auth & state
-                                          ├── Create Operation record (status: pending)
-                                          ├── Return 202 + Location: /v1/operations/{id}
-                                          │
-                                          ├── [Async] Issue AWS API call
-                                          ├── [Async] Poll AWS for completion
-                                          ├── [Async] Update Operation (in_progress → completed)
-                                          └── [Async] Update Server status (starting → running)
+Web client or Discord bot --> Control-plane API --> AWS EC2 game servers
 ```
 
-### Read Operations (Status / Telemetry)
+The web service and Discord bot do not yet call the API. They are foundations
+for those integrations.
 
+## Control-Plane API
+
+Location: `src/services/control-plane-api`
+
+The API currently registers these routes:
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/health` | Health response |
+| `GET` | `/v1/servers` | List managed servers |
+| `GET` | `/v1/servers/{serverId}` | Get server details |
+| `POST` | `/v1/servers/{serverId}/start` | Start a server |
+| `POST` | `/v1/servers/{serverId}/stop` | Stop a server |
+| `POST` | `/v1/servers/{serverId}/reboot` | Reboot a server |
+
+The API loads its port, AWS game-server tag names, and AWS credentials from
+the environment. See the service [README](../src/services/control-plane-api/README.md)
+and [OpenAPI specification](../src/services/control-plane-api/openapi.yaml).
+
+OAuth2, scoped authorization, async operation resources, conditional requests,
+telemetry, process inspection, and logs are planned but are not implemented by
+the current HTTP server.
+
+## Web Service
+
+Location: `src/services/control-plane-web`
+
+The current TypeScript service is an Express process with one route:
+
+```text
+GET /health
 ```
-Client ──GET /v1/servers/{id}──► API
-                                  │
-                                  ├── Check If-None-Match / ETag
-                                  ├── Return 304 if unchanged
-                                  └── Return 200 + fresh data + new ETag + Cache-Control
-```
+
+A browser dashboard and API client are planned. The service currently does
+not provide server management, telemetry, authentication, or an API proxy.
+
+## Discord Bot
+
+Location: `src/discord/control-bot`
+
+The current Go bot:
+
+- Connects using `DISCORD_TOKEN`.
+- Ignores messages authored by itself.
+- Responds when a user mentions the bot.
+- Does not call the control-plane API.
+
+Discord server commands, authorization, and natural-language parsing are
+planned work.
 
 ## Deployment
 
-```
-GitHub Push ──► GitHub Actions ──► Build Docker image ──► Push to GHCR
-                                                              │
-                                                              ▼
-                                              Kubernetes (Kustomize)
-                                              ├── base/       (common config)
-                                              ├── local/      (dev overlays)
-                                              └── prod/       (production overlays)
-```
+All service images have Dockerfiles. The Go harness builds local images named
+`localhost/<service>:<tag>` and applies the local or production Kustomize
+overlay.
 
-All services are containerized and deployed to Kubernetes. Kustomize overlays handle environment-specific differences (credentials, replica counts, resource limits). No manual infrastructure changes — everything is Infrastructure as Code.
+The local overlay deploys the API, web service, and bot. The production overlay
+currently deploys the API and bot; it intentionally removes the web Deployment
+and Service. Production secrets are sourced from AWS Systems Manager through
+External Secrets Operator.
 
-## Authentication & Authorization
+The GitHub Actions workflow currently publishes only the API image to GHCR. It
+does not deploy to Kubernetes or synchronize an Argo CD application. Publishing
+the web and bot images and automating deployment remain follow-up work.
 
-- **Scheme:** OAuth2 client credentials flow
-- **Token endpoint:** served by the API itself (`/oauth/token`)
-- **Scopes:**
-  - `control:ro` — read server state and operations
-  - `control:rw` — full control (start, stop, reboot)
-  - `observability:ro` — read telemetry and logs
-- **Granularity:** Per-endpoint. An endpoint can accept multiple scopes (e.g., GET servers accepts both `control:ro` and `control:rw`).
+## Observability And Authentication
 
-## Design Decisions
+Prometheus, Grafana, OpenTelemetry, OAuth2, rate limiting, and audit logging
+are target capabilities, not currently deployed components in this repository.
 
-| Decision                     | Rationale                                                                 |
-| ---------------------------- | ------------------------------------------------------------------------- |
-| REST over GraphQL/gRPC       | Broader client compatibility, easier caching, simpler for a small API     |
-| Async operations (202 + poll)| Server starts/stops take minutes; blocking HTTP calls are impractical     |
-| Conditional requests (ETag)  | Reduces bandwidth and server load for polling clients                     |
-| Kustomize over Helm          | Lighter weight, better fits a small project, still declarative            |
-| Distroless containers        | Minimal attack surface, smaller images, faster pulls                      |
+## Design Direction
+
+The intended architecture remains a REST API consumed by a web client and a
+Discord bot, with Kubernetes and Kustomize for deployment. Planned work should
+keep the API as the single source of truth for server operations and should
+avoid adding direct AWS control paths to client-facing services.
 
 ## Open Questions
 
-- Exact game server inventory model — register via API, IaC, or both?
-- Discord bot — Go or TypeScript? Shared auth client available in both?
-- Observability pipeline — self-hosted Prometheus/Grafana or managed (Grafana Cloud, AWS Managed Prometheus)?
-- Server log streaming — push (SSE from API) or pull (ship to Loki/CloudWatch)?
-- Cost guardrails — automatic shutdown after idle period? Budget alerts?
+- What is the final game-server inventory and registration model?
+- Which Discord commands and permission model should be exposed?
+- Which OAuth2 provider should issue client credentials?
+- Should observability be self-hosted or managed?
+- Should server log streaming use SSE, Loki, or CloudWatch?
+- What cost guardrails should stop idle servers?
