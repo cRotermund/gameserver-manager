@@ -10,7 +10,7 @@ namespace: chad-applications
 images:
   - name: control-plane-api
     newName: ghcr.io/crotermund/gameserver-manager/control-plane-api
-    newTag: b98113d
+    newTag: latest
 
 patches:
   - target:

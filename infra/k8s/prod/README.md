@@ -26,12 +26,10 @@ later refactor.
 
 ## Image
 
-The overlay currently references:
+The overlay currently references the `latest` image:
 
 ```text
-ghcr.io/crotermund/gameserver-manager/control-plane-api:b98113d
+ghcr.io/crotermund/gameserver-manager/control-plane-api:latest
 ```
 
-Publish that image before syncing the Argo CD application. Replace the tag in
-`kustomization.yaml` with the immutable image tag or digest produced by the
-release workflow when one is established.
+Publish that image before syncing the Argo CD application.
