@@ -1,6 +1,7 @@
 # Production Secret Bootstrap And Rotation SOP
 
-This procedure provisions the runtime secrets used by the production API.
+This procedure provisions the runtime secrets used by the production API and
+Discord bot.
 Secret values remain in a local, gitignored environment file and are written
 to AWS Systems Manager Parameter Store as `SecureString` parameters.
 Kubernetes reads those parameters through External Secrets Operator; values
@@ -9,8 +10,9 @@ are never committed to Git or placed in a Kubernetes manifest.
 ## Why This Exists
 
 The production API needs AWS credentials to assume its game-server control
-role. SSM is the source of truth for these values, while the application
-repository contains only ExternalSecret references.
+role, and the Discord bot needs its Discord application token. SSM is the
+source of truth for these values, while the application repository contains
+only ExternalSecret references.
 
 The harness writes the following parameters:
 
@@ -19,8 +21,9 @@ The harness writes the following parameters:
 | `/kubernetes/appsecrets/gameserver-manager/control-plane-api/aws-access-key-id` | API source credential access key |
 | `/kubernetes/appsecrets/gameserver-manager/control-plane-api/aws-secret-access-key` | API source credential secret key |
 | `/kubernetes/appsecrets/gameserver-manager/control-plane-api/aws-role-arn` | Role assumed by the API for EC2 operations |
+| `/kubernetes/appsecrets/gameserver-manager/control-bot/discord-token` | Discord bot application token |
 
-All three values are stored as `SecureString` parameters. The AWS CLI identity
+All four values are stored as `SecureString` parameters. The AWS CLI identity
 used to run the harness must be allowed to write these parameters and use the
 configured KMS key, if a customer-managed key is used.
 
@@ -30,6 +33,7 @@ configured KMS key, if a customer-managed key is used.
 - The AWS region is `us-east-1`, unless overridden with `--region`.
 - The API access key can call `sts:AssumeRole` for the configured API role.
 - The API role grants the required EC2 actions for managed game-server instances.
+- The Discord application token belongs to the bot deployed by this project.
 - The GitOps `chad-applications` ExternalSecret configuration is installed and healthy.
 
 The AWS CLI identity used by the operator is separate from the `AWS_ACCESS_KEY_ID`
@@ -52,6 +56,7 @@ Set the values in `infra/k8s/prod/secrets.env`:
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
 AWS_ROLE_ARN=arn:aws:iam::123456789012:role/game-server-manager
+DISCORD_TOKEN=...
 ```
 
 On Windows, keep the file inside the repository but confirm it remains ignored
@@ -81,6 +86,14 @@ Use an explicit AWS profile or region when needed:
   --region us-east-1
 ```
 
+To bootstrap only the Discord token, use the environment variable name from
+`secrets.env`. The `--only` flag can be repeated or supplied as a
+comma-separated list:
+
+```bash
+./harness.sh secrets bootstrap --only DISCORD_TOKEN
+```
+
 The harness prints parameter names only. Secret values are written through a
 short-lived, permission-restricted AWS CLI JSON input file and are removed
 after each write.
@@ -88,28 +101,41 @@ after each write.
 ## Rotate
 
 Update the local `secrets.env` file with the new API credential or role ARN,
-then overwrite the existing SSM values:
+or Discord token, then overwrite the existing SSM values:
 
 ```bash
 ./harness.sh secrets rotate
 ```
 
-Rotation updates all three parameters from the file. The operation is
+To rotate only the Discord token without changing the existing API parameters:
+
+```bash
+./harness.sh secrets rotate --only DISCORD_TOKEN
+```
+
+Supported filter values are `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
+`AWS_ROLE_ARN`, and `DISCORD_TOKEN`. Without `--only`, all four parameters are
+validated and synchronized.
+
+Rotation updates all four parameters from the file. The operation is
 deterministic, but AWS SSM writes are not transactional; if a write fails,
 inspect the reported parameter and rerun rotation after correcting the cause.
 After the External Secrets refresh interval, verify the generated Kubernetes Secrets:
 
 ```bash
-kubectl get externalsecret control-plane-api -n chad-applications
+kubectl get externalsecret control-plane-api control-bot -n chad-applications
 ```
 
-For an API credential rotation, restart the API Deployment after the
-`control-plane-api` ExternalSecret reports `Ready=True` so the new environment
-values are loaded:
+Restart the affected Deployment after its ExternalSecret reports `Ready=True`
+so the new environment value is loaded:
 
 ```bash
 kubectl rollout restart deployment/control-plane-api -n chad-applications
 kubectl rollout status deployment/control-plane-api -n chad-applications
+
+# Use these commands when the Discord token changed.
+kubectl rollout restart deployment/control-bot -n chad-applications
+kubectl rollout status deployment/control-bot -n chad-applications
 ```
 
 ## Verification And Cleanup
@@ -119,6 +145,11 @@ Verify only metadata and Secret types. Do not print secret data:
 ```bash
 aws ssm get-parameter \
   --name /kubernetes/appsecrets/gameserver-manager/control-plane-api/aws-role-arn \
+  --with-decryption \
+  --query 'Parameter.{Name:Name,Type:Type,Version:Version}'
+
+aws ssm get-parameter \
+  --name /kubernetes/appsecrets/gameserver-manager/control-bot/discord-token \
   --with-decryption \
   --query 'Parameter.{Name:Name,Type:Type,Version:Version}'
 ```
@@ -140,3 +171,4 @@ credentials immediately after confirming the replacement.
 - If AWS reports `AccessDenied`, check the operator IAM policy, region, parameter path, and KMS permissions.
 - If an ExternalSecret is not ready, inspect its status and the External Secrets controller logs without printing generated Secret data.
 - If the API cannot assume its role after rotation, verify the trust policy and the `AWS_ROLE_ARN` value.
+- If the bot does not reconnect after rotation, verify the `control-bot` ExternalSecret, restart the Deployment, and inspect logs without printing the token.

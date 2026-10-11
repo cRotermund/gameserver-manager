@@ -29,7 +29,7 @@ func main() {
 
 	sess, err := discordgo.New("Bot " + token)
 	if err != nil {
-		logger.Error("Error creating Discord session: $v", err)
+		logger.Error("Error creating Discord session", "err", err)
 		os.Exit(1)
 	}
 
@@ -39,7 +39,7 @@ func main() {
 
 	err = sess.Open()
 	if err != nil {
-		logger.Error("Error opening connection to Discord $v", err)
+		logger.Error("Error opening connection to Discord", "err", err)
 		os.Exit(1)
 	}
 
@@ -75,6 +75,6 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	_, err := s.ChannelMessageSend(m.ChannelID, responseMessage)
 
 	if err != nil {
-		slog.Error("Error sending message: %v", err)
+		slog.Error("Error sending message", "err", err)
 	}
 }
