@@ -4,12 +4,16 @@ kind: Kustomization
 resources:
   - ../base
   - control-plane-api-external-secret.yaml
+  - control-bot-external-secret.yaml
 
 namespace: chad-applications
 
 images:
   - name: control-plane-api
     newName: ghcr.io/crotermund/gameserver-manager/control-plane-api
+    newTag: latest
+  - name: control-bot
+    newName: ghcr.io/crotermund/gameserver-manager/control-bot
     newTag: latest
 
 patches:
@@ -34,12 +38,11 @@ patches:
   - target:
       kind: Deployment
       name: control-bot
-    patch: |
-      $patch: delete
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: control-bot
+    patch: |-
+      - op: add
+        path: /spec/template/spec/imagePullSecrets
+        value:
+          - name: ghcr-pull-secret
   - target:
       kind: Deployment
       name: control-plane-api
