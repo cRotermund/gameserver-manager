@@ -37,5 +37,7 @@ ghcr.io/crotermund/gameserver-manager/control-plane-api:latest
 ghcr.io/crotermund/gameserver-manager/control-bot:latest
 ```
 
-Publish both images before syncing the Argo CD application. The GHCR pull
-secret referenced by the Deployments must also exist in the target namespace.
+Both images must be available before syncing the production overlay. The GHCR
+pull secret referenced by the Deployments must also exist in the target
+namespace. This repository does not contain an Argo CD Application definition
+or perform the sync automatically.

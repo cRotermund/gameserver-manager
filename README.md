@@ -1,132 +1,131 @@
 # Game Server Manager
 
-Manage game server infrastructure in AWS without touching the console — from a web UI or directly in Discord.
+Game Server Manager is a Go control-plane API, a TypeScript web health service,
+and a Go Discord bot for managing AWS game-server infrastructure. The current
+repository provides the API's initial server-control endpoints and a minimal
+Discord hello-world bot; the broader dashboard and command experience remains
+under development.
 
-## What It Does
+## Current Components
 
-Game Server Manager provides a simple way to control game servers running on AWS. Start, stop, reboot, and monitor servers without granting anyone AWS console access.
+| Component | Current behavior |
+| --- | --- |
+| **REST API** | Lists servers and starts, stops, or reboots them through AWS EC2. |
+| **Web service** | Serves a health endpoint on port `3000`. |
+| **Discord bot** | Replies to messages that mention it with a hello-world response. |
+| **Harness** | Builds images and applies or deletes local and production Kustomize overlays. |
 
-| Channel          | What you can do                                           |
-| ---------------- | --------------------------------------------------------- |
-| **Web App**      | Full dashboard — server list, start/stop, telemetry, logs |
-| **Discord Bot**  | Quick commands from chat — `!start`, `!stop`, `!status`   |
-| **REST API**     | Programmatic control for automation and integrations      |
+The API routes are currently:
 
-## Architecture at a Glance
+- `GET /health`
+- `GET /v1/servers`
+- `GET /v1/servers/{serverId}`
+- `POST /v1/servers/{serverId}/start`
+- `POST /v1/servers/{serverId}/stop`
+- `POST /v1/servers/{serverId}/reboot`
+
+## Architecture
 
 ```
- Discord Bot ──┐
-               ├──► REST API ──► AWS (EC2 / ECS) Game Servers
-  Web App ─────┘        │
-                        ├──► Prometheus / Grafana (metrics)
-                        └──► OpenTelemetry (traces)
+Discord Bot ──┐
+              ├──> REST API ──> AWS EC2 game servers
+Web Service ──┘
 ```
 
-All components run as containers on Kubernetes, defined with Kustomize.
+All services are containerized. Kubernetes manifests use Kustomize with a
+local overlay and a production overlay. See [docs/architecture.md](docs/architecture.md)
+for the current implementation and planned architecture.
 
-## Features
+## Planned Work
 
-- **Start / Stop / Reboot** game servers on demand
-- **Real-time observability** — CPU, memory, disk, network, connected clients
-- **Per-server process inspection** — see what's running
-- **Async operations** with polling — know when a start/stop completes
-- **OAuth2 authentication** — scoped access (read-only or read-write)
-- **Rate limiting** — protects against runaway clients or abuse
-- **Audit logging** — every control action is tied to a user
-
-### On the Roadmap
-
-- Telemetry streaming (SSE) for live dashboards
-- Log retrieval and tail streaming
-- Server registration and de-registration via API
-- Discord bot with natural-language command parsing
+- Browser dashboard for server management and telemetry
+- Discord commands backed by the REST API
+- OAuth2 authentication and scoped authorization
+- Async operation resources and polling
+- Metrics, tracing, logs, and audit history
+- Additional API endpoints for telemetry, processes, and logs
 
 ## Tech Stack
 
-| Layer         | Technology                        |
-| ------------- | --------------------------------- |
-| Backend API   | Go (Dockerized)                   |
-| Web Frontend  | TypeScript                        |
-| Discord Bot   | TypeScript                        |
-| Auth          | OAuth2 (client credentials)       |
-| Observability | Prometheus, Grafana, OpenTelemetry|
-| Infra         | AWS (EC2/ECS), Kubernetes, Kustomize |
+| Layer | Technology |
+| --- | --- |
+| Backend API | Go |
+| Discord bot | Go |
+| Web service | TypeScript and Node.js |
+| Deployment harness | Go |
+| Infrastructure | AWS, Kubernetes, Kustomize |
+| Containers | Docker-compatible runtime and distroless images where applicable |
 
 ## Getting Started
 
 ### Prerequisites
 
-| Tool       | Version    | Why                             |
-| ---------- | ---------- | ------------------------------- |
-| Go         | >= 1.24    | API service                     |
-| Node.js    | >= 22      | Web frontend & Discord bot      |
-| Python     | >= 3.10    | `deploy` harness (K8s only)  |
-| Docker     | latest     | Container builds                |
-| kubectl    | latest     | K8s deployments                 |
-| kustomize  | latest     | K8s configuration               |
+| Tool | Version | Why |
+| --- | --- | --- |
+| Go | >= 1.26 | API, Discord bot, and deployment harness |
+| Node.js | >= 22 | Web service |
+| Docker or Podman | Current release | Container builds |
+| kubectl | Current release | Kubernetes access |
+| kustomize | Current release, optional | Standalone manifest rendering; the harness falls back to `kubectl apply -k` when unavailable |
 
-Kubernetes is only required for the container-based workflow. For true local development (stepping through code in an IDE), you only need Go and Node.js.
+### Run Services Directly
 
-### Two Development Workflows
-
-Pick the one that fits your style.
-
----
-
-**Path A — Run services directly on your machine**
-
-Ideal for debugging, stepping through code, and fast iteration loops. No containers, no Kubernetes.
+API:
 
 ```sh
-# Terminal 1 — API (Go)
 cd src/services/control-plane-api
-go run .                          # listens on :8080
+# Set PORT, the three GAMESERVER_* tag names, and AWS credentials first.
+go run .
+```
 
-# Terminal 2 — Web frontend (TypeScript)
+Web service:
+
+```sh
 cd src/services/control-plane-web
 npm install
-npm run dev                       # listens on :3000
-
-# Terminal 3 — Discord bot (optional, needs a token)
-cd src/discord/control-bot
-npm install
-DISCORD_TOKEN=<your-token> npm run dev
+npm run dev
 ```
 
-Open `http://localhost:3000` for the web UI, or point your HTTP client at `http://localhost:8080` for the API.
-
----
-
-**Path B — Run in containers with Kubernetes**
-
-Matches the production environment. Uses the `deploy` CLI as a one-stop harness.
+Discord bot:
 
 ```sh
-# 1. Start your local cluster (minikube, kind, or Rancher Desktop)
-
-# 2. Install Python dependencies
-pip install -e .
-
-# 3. Build all images
-deploy build
-
-# 4. Deploy to the cluster
-deploy apply
-
-# 5. Port-forward the services
-deploy port-forward api     # API at localhost:8080
-deploy port-forward web     # Web at localhost:3000
+cd src/discord/control-bot
+DISCORD_TOKEN=<your-token> go run .
 ```
 
-The harness auto-detects your container CLI (podman or docker) and cluster type. For the Discord bot, copy `infra/k8s/local/bot.env.sample` to `bot.env` with your token before deploying.
+The bot also loads a `.env` file from its working directory. Never commit a
+real token.
 
----
+### Run With Kubernetes
 
-Full development environment details, troubleshooting, and environmental quirks are covered in [CONTRIBUTING.md](CONTRIBUTING.md).
+Start a local Kubernetes cluster, then run these commands from the repository
+root:
+
+```sh
+# Build all service images and load them when the cluster supports it.
+./harness.sh build
+
+# Create local secret files from the examples and fill in real values.
+cp infra/k8s/local/api.env.example infra/k8s/local/api.env
+cp infra/k8s/local/bot.env.example infra/k8s/local/bot.env
+
+# Apply the local overlay.
+./harness.sh apply
+
+# Port-forward the API or web service.
+./harness.sh port-forward api
+./harness.sh port-forward web
+```
+
+The local secret files are gitignored. The Discord bot requires
+`DISCORD_TOKEN`; the API also requires its AWS and game-server configuration.
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/local-dev.md](docs/local-dev.md)
+for setup details.
 
 ## Contributing
 
-Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, conventions, and workflow. The [architecture doc](docs/architecture.md) covers system design in depth.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development conventions and
+[docs/architecture.md](docs/architecture.md) for system design.
 
 ## License
 
