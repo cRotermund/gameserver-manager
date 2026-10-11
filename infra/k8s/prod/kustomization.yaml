@@ -3,18 +3,46 @@ kind: Kustomization
 
 resources:
   - ../base
+  - control-plane-api-external-secret.yaml
+
+namespace: chad-applications
+
+images:
+  - name: control-plane-api
+    newName: ghcr.io/crotermund/gameserver-manager/control-plane-api
+    newTag: b98113d
 
 patches:
   - target:
       kind: Deployment
-      name: control-plane-api
+      name: control-plane-web
     patch: |
-      - op: replace
-        path: /spec/replicas
-        value: 2
+      $patch: delete
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: control-plane-web
+  - target:
+      kind: Service
+      name: control-plane-web
+    patch: |
+      $patch: delete
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: control-plane-web
   - target:
       kind: Deployment
-      name: control-plane-web
+      name: control-bot
+    patch: |
+      $patch: delete
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: control-bot
+  - target:
+      kind: Deployment
+      name: control-plane-api
     patch: |
       - op: replace
         path: /spec/replicas

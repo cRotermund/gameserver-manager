@@ -20,6 +20,14 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
+              name: http
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
           env:
             # -- SERVER CONFIGURATION --
             - name: PORT
@@ -49,3 +57,22 @@ spec:
                 secretKeyRef:
                   name: control-plane-api-secret
                   key: AWS_ROLE_ARN
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
