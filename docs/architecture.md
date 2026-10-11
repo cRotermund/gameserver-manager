@@ -79,9 +79,10 @@ currently deploys the API and bot; it intentionally removes the web Deployment
 and Service. Production secrets are sourced from AWS Systems Manager through
 External Secrets Operator.
 
-The GitHub Actions workflow currently publishes only the API image to GHCR. It
-does not deploy to Kubernetes or synchronize an Argo CD application. Publishing
-the web and bot images and automating deployment remain follow-up work.
+The GitHub Actions workflow publishes the API and bot images to GHCR. It does
+not publish the web image, deploy to Kubernetes, or synchronize an Argo CD
+application. Web image publication and deployment automation remain follow-up
+work.
 
 ## Observability And Authentication
 
