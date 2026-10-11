@@ -1,20 +1,15 @@
-FROM node:22-alpine AS base
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
-COPY package.json package-lock.json tsconfig.json ./
+COPY go.mod ./
+RUN go mod download
+COPY . ./
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/bot .
 
-FROM base AS builder
-RUN npm ci
-COPY src/ src/
-RUN npm run build
-RUN npm ci --omit=dev && npm cache clean --force
+FROM gcr.io/distroless/static-debian12:nonroot
 
-FROM node:22-alpine AS runner
+WORKDIR /root/
 
-WORKDIR /app
-COPY --from=builder /app/dist/ dist/
-COPY --from=builder /app/node_modules/ node_modules/
-COPY --from=builder /app/package.json ./
+COPY --from=builder /app/bot .
 
-USER node
-CMD ["node", "dist/index.js"]
+CMD ["./bot"]
