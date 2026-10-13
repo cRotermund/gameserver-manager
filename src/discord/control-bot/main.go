@@ -8,6 +8,9 @@ import (
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/cRotermund/gameserver-manager/src/discord/control-bot/internal/commands"
+	"github.com/cRotermund/gameserver-manager/src/discord/control-bot/internal/messaging"
+	"github.com/cRotermund/gameserver-manager/src/discord/control-bot/internal/middleware"
 	"github.com/joho/godotenv"
 )
 
@@ -27,13 +30,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	//Initialize the router, the middleware, and the command handlers
+	router := messaging.NewRouter("!", logger)
+	router.Use(middleware.LoggingMiddelware)
+	commands.RegisterCommands(router)
+
+	//Connect to discord
 	sess, err := discordgo.New("Bot " + token)
 	if err != nil {
 		logger.Error("Error creating Discord session", "err", err)
 		os.Exit(1)
 	}
 
-	sess.AddHandler(messageCreate)
+	sess.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
+		onMessageCreate(s, m, router)
+	})
 
 	sess.Identify.Intents = discordgo.MakeIntent(discordgo.IntentsGuildMessages | discordgo.IntentsGuilds)
 
@@ -53,12 +64,13 @@ func main() {
 	sess.Close()
 }
 
-func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-	//ignore messages from self, to avoid infinite loops
+func onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate, r *messaging.Router) {
+	// ignore messages from self, to avoid infinite loops
 	if m.Author.ID == s.State.User.ID {
 		return
 	}
 
+	// ensure we have been tagged - otherwise ignore.
 	isMentioned := false
 	for _, user := range m.Mentions {
 		if user.ID == s.State.User.ID {
@@ -71,10 +83,30 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	responseMessage := fmt.Sprintf("Hello <@%s>! You rang?", m.Author.ID)
-	_, err := s.ChannelMessageSend(m.ChannelID, responseMessage)
+	resp, err := r.Dispatch(s, m.Message)
 
 	if err != nil {
 		slog.Error("Error sending message", "err", err)
+		sysErrorResponse(s, m)
+		return
 	}
+
+	if !resp.WasRouted {
+		noRouteResponse(s, m)
+		return
+	}
+}
+
+func noRouteResponse(s *discordgo.Session, m *discordgo.MessageCreate) {
+	defaultResp := fmt.Sprintf("Hello <@%s>! You rang?  Give me a command, prefixed with '!', like !help to learn more.", m.Author.ID)
+	_, err := s.ChannelMessageSend(m.ChannelID, defaultResp)
+
+	if err != nil {
+		slog.Error("Error sending message", "err", err)
+		sysErrorResponse(s, m)
+	}
+}
+
+func sysErrorResponse(s *discordgo.Session, m *discordgo.MessageCreate) {
+	s.ChannelMessageSend(m.ChannelID, "Something went wrong trying to process your message. I'm sorry.")
 }
