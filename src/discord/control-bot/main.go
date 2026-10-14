@@ -6,49 +6,53 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/cRotermund/gameserver-manager/src/discord/control-bot/internal/apihandling"
 	"github.com/cRotermund/gameserver-manager/src/discord/control-bot/internal/commands"
+	"github.com/cRotermund/gameserver-manager/src/discord/control-bot/internal/config"
+	"github.com/cRotermund/gameserver-manager/src/discord/control-bot/internal/discord"
 	"github.com/cRotermund/gameserver-manager/src/discord/control-bot/internal/messaging"
 	"github.com/cRotermund/gameserver-manager/src/discord/control-bot/internal/middleware"
-	"github.com/joho/godotenv"
+	"resty.dev/v3"
 )
+
+type Runtime struct {
+	gsmClient      *apihandling.GsmApiClient
+	router         *messaging.Router
+	discordSession *discordgo.Session
+}
+
+func (s *Runtime) destroy() {
+	s.gsmClient.Close()
+	s.discordSession.Close()
+}
 
 func main() {
 	logger := slog.Default()
 
-	// Load the .env file. By default, it looks for a file named ".env" in the current directory.
-	err := godotenv.Load()
+	config := config.NewBotConfig(logger)
+	err := config.Load()
 	if err != nil {
-		logger.Warn("No .env file found, using existing environment", "Error", err)
-	}
-
-	token := os.Getenv("DISCORD_TOKEN")
-
-	if token == "" {
-		logger.Error("Error: DISCORD_TOKEN environment variable is required")
+		logger.Error("Fatal error loading configuration, shutting down")
 		os.Exit(1)
 	}
 
-	//Initialize the router, the middleware, and the command handlers
-	router := messaging.NewRouter("!", logger)
-	router.Use(middleware.LoggingMiddelware)
-	commands.RegisterCommands(router)
+	services := initRuntime(config, logger)
 
-	//Connect to discord
-	sess, err := discordgo.New("Bot " + token)
-	if err != nil {
-		logger.Error("Error creating Discord session", "err", err)
-		os.Exit(1)
-	}
+	services.discordSession.AddHandler(
+		func(session *discordgo.Session, message *discordgo.MessageCreate) {
+			onMessageCreate(
+				session,
+				message,
+				services.router,
+				logger)
+		})
 
-	sess.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
-		onMessageCreate(s, m, router)
-	})
+	services.discordSession.Identify.Intents = discordgo.MakeIntent(discordgo.IntentsGuildMessages | discordgo.IntentsGuilds)
 
-	sess.Identify.Intents = discordgo.MakeIntent(discordgo.IntentsGuildMessages | discordgo.IntentsGuilds)
-
-	err = sess.Open()
+	err = services.discordSession.Open()
 	if err != nil {
 		logger.Error("Error opening connection to Discord", "err", err)
 		os.Exit(1)
@@ -61,10 +65,11 @@ func main() {
 	<-sc
 
 	slog.Info("Shutting down gracefully...")
-	sess.Close()
+
+	services.destroy()
 }
 
-func onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate, r *messaging.Router) {
+func onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate, router *messaging.Router, logger *slog.Logger) {
 	// ignore messages from self, to avoid infinite loops
 	if m.Author.ID == s.State.User.ID {
 		return
@@ -83,7 +88,8 @@ func onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate, r *messag
 		return
 	}
 
-	resp, err := r.Dispatch(s, m.Message)
+	msgClient := discord.NewDiscordMessagingClient(logger, s, m.Message)
+	resp, err := router.Dispatch(s, m.Message, msgClient)
 
 	if err != nil {
 		slog.Error("Error sending message", "err", err)
@@ -109,4 +115,41 @@ func noRouteResponse(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 func sysErrorResponse(s *discordgo.Session, m *discordgo.MessageCreate) {
 	s.ChannelMessageSend(m.ChannelID, "Something went wrong trying to process your message. I'm sorry.")
+}
+
+func initRuntime(cfg *config.DiscordBotConfig, logger *slog.Logger) *Runtime {
+	//Initialize the resty protocol client for the gsm api
+	restyClient := resty.New()
+	restyClient.SetTimeout(time.Duration(cfg.GsmApiConfig.TimeoutMs) * time.Millisecond)
+
+	//Initialize the gsm api handler
+	gsmApi := apihandling.NewClient(
+		logger,
+		cfg.GsmApiConfig.Host,
+		cfg.GsmApiConfig.Port,
+		restyClient)
+
+	//Initialize the router, the middleware, and the command handlers
+	router := messaging.NewRouter("!", logger)
+	router.Use(middleware.LoggingMiddelware)
+	router.Handle("startserver", commands.StartServerCommand(gsmApi))
+	router.Handle("stopserver", commands.StopServerCommand(gsmApi))
+	router.Handle("serverstatus", commands.ServerStatusCommand(gsmApi))
+	// TODO
+	// router.Handle("listservers", commands.ListServersCommand(gsmApi))
+	router.Handle("help", commands.HelpCommand())
+
+	//Connect to discord and capture the session information
+	sess, err := discordgo.New("Bot " + cfg.DiscordToken)
+	if err != nil {
+		logger.Error("Error creating Discord session", "err", err)
+		os.Exit(1)
+	}
+
+	//Return these in a struct for later reference
+	return &Runtime{
+		gsmClient:      gsmApi,
+		router:         router,
+		discordSession: sess,
+	}
 }

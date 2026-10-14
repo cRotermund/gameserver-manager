@@ -24,3 +24,7 @@ spec:
                 secretKeyRef:
                   name: control-bot-secret
                   key: DISCORD_TOKEN
+            - name: GSM_API_HOST
+              value: control-plane-api
+            - name: GSM_API_PORT
+              value: 8080

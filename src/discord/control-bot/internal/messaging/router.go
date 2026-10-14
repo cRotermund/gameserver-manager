@@ -51,7 +51,7 @@ func (r *Router) Use(m Middleware) {
 	r.middleware = append(r.middleware, m)
 }
 
-func (r *Router) Dispatch(session *discordgo.Session, message *discordgo.Message) (result DispatchResult, err error) {
+func (r *Router) Dispatch(session *discordgo.Session, message *discordgo.Message, msgClient MessagingClient) (result DispatchResult, err error) {
 	res := DispatchResult{
 		WasRouted: false,
 	}
@@ -84,7 +84,7 @@ func (r *Router) Dispatch(session *discordgo.Session, message *discordgo.Message
 	ctx := &Context{
 		Logger: r.logger,
 		Sender: message.Author.ID,
-		Client: NewDiscordMessagingClient(r.logger, session, message),
+		Client: msgClient,
 		Command: &Command{
 			Name:    cmdName,
 			Args:    args,
