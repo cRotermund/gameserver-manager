@@ -9,17 +9,17 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/cRotermund/gameserver-manager/src/discord/control-bot/internal/apihandling"
 	"github.com/cRotermund/gameserver-manager/src/discord/control-bot/internal/commands"
 	"github.com/cRotermund/gameserver-manager/src/discord/control-bot/internal/config"
 	"github.com/cRotermund/gameserver-manager/src/discord/control-bot/internal/discord"
 	"github.com/cRotermund/gameserver-manager/src/discord/control-bot/internal/messaging"
 	"github.com/cRotermund/gameserver-manager/src/discord/control-bot/internal/middleware"
+	"github.com/cRotermund/gameserver-manager/src/pkg/controlplaneclient"
 	"resty.dev/v3"
 )
 
 type Runtime struct {
-	gsmClient      *apihandling.GsmApiClient
+	gsmClient      *controlplaneclient.GsmApiClient
 	router         *messaging.Router
 	discordSession *discordgo.Session
 }
@@ -123,7 +123,7 @@ func initRuntime(cfg *config.DiscordBotConfig, logger *slog.Logger) *Runtime {
 	restyClient.SetTimeout(time.Duration(cfg.GsmApiConfig.TimeoutMs) * time.Millisecond)
 
 	//Initialize the gsm api handler
-	gsmApi := apihandling.NewClient(
+	gsmApi := controlplaneclient.NewClient(
 		logger,
 		cfg.GsmApiConfig.Host,
 		cfg.GsmApiConfig.Port,
@@ -135,8 +135,7 @@ func initRuntime(cfg *config.DiscordBotConfig, logger *slog.Logger) *Runtime {
 	router.Handle("startserver", commands.StartServerCommand(gsmApi))
 	router.Handle("stopserver", commands.StopServerCommand(gsmApi))
 	router.Handle("serverstatus", commands.ServerStatusCommand(gsmApi))
-	// TODO
-	// router.Handle("listservers", commands.ListServersCommand(gsmApi))
+	router.Handle("listservers", commands.ListServersCommand(gsmApi))
 	router.Handle("help", commands.HelpCommand())
 
 	//Connect to discord and capture the session information

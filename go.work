@@ -3,5 +3,8 @@ go 1.26.4
 use (
 	./harness
 	./src/discord/control-bot
+	./src/pkg/controlplaneclient
 	./src/services/control-plane-api
 )
+
+replace github.com/cRotermund/gameserver-manager/src/pkg/controlplaneclient v0.0.0 => ./src/pkg/controlplaneclient

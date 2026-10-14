@@ -19,7 +19,7 @@ jobs:
             context: ./src/services/control-plane-api
             file: ./src/services/control-plane-api/Dockerfile
           - image: control-bot
-            context: ./src/discord/control-bot
+            context: .
             file: ./src/discord/control-bot/Dockerfile
     permissions:
       contents: read
