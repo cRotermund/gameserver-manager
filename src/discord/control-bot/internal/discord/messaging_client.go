@@ -1,6 +1,7 @@
 package discord
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/bwmarrin/discordgo"
@@ -25,6 +26,19 @@ func NewDiscordMessagingClient(
 	}
 }
 
-func (c *DiscordMessagingClient) Reply(msg string) {
-	c.session.ChannelMessageSend(c.rootMsg.ChannelID, msg)
+func (c *DiscordMessagingClient) Reply(ctx context.Context, msg string) error {
+	_, err := c.session.ChannelMessageSend(
+		c.rootMsg.ChannelID,
+		msg,
+		discordgo.WithContext(ctx))
+
+	if err != nil {
+		c.logger.Error(
+			"Error sending message to discord.",
+			"err", err)
+
+		return err
+	}
+
+	return nil
 }

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -19,6 +21,7 @@ import (
 )
 
 type Runtime struct {
+	ctx            context.Context
 	gsmClient      *controlplaneclient.GsmApiClient
 	router         *messaging.Router
 	discordSession *discordgo.Session
@@ -30,46 +33,62 @@ func (s *Runtime) destroy() {
 }
 
 func main() {
-	logger := slog.Default()
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		syscall.SIGINT,
+		syscall.SIGTERM,
+	)
+	defer stop()
+
+	logger := slog.New(
+		slog.NewJSONHandler(
+			os.Stdout,
+			&slog.HandlerOptions{
+				Level: slog.LevelInfo,
+			}))
+	slog.SetDefault(logger)
 
 	config := config.NewBotConfig(logger)
 	err := config.Load()
 	if err != nil {
-		logger.Error("Fatal error loading configuration, shutting down")
+		logger.Error(
+			"failed to load configuration, shutting down",
+			"err", err)
 		os.Exit(1)
 	}
 
-	services := initRuntime(config, logger)
+	runtime := initRuntime(ctx, config, logger)
 
-	services.discordSession.AddHandler(
+	runtime.discordSession.AddHandler(
 		func(session *discordgo.Session, message *discordgo.MessageCreate) {
 			onMessageCreate(
+				runtime.ctx,
 				session,
 				message,
-				services.router,
+				runtime.router,
 				logger)
 		})
 
-	services.discordSession.Identify.Intents = discordgo.MakeIntent(discordgo.IntentsGuildMessages | discordgo.IntentsGuilds)
+	runtime.discordSession.Identify.Intents = discordgo.MakeIntent(discordgo.IntentsGuildMessages | discordgo.IntentsGuilds)
 
-	err = services.discordSession.Open()
+	err = runtime.discordSession.Open()
 	if err != nil {
 		logger.Error("Error opening connection to Discord", "err", err)
 		os.Exit(1)
 	}
 
-	fmt.Println("Bot is now running.")
+	logger.Info("Bot is now running.")
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
 
-	slog.Info("Shutting down gracefully...")
+	logger.Info("Shutting down gracefully...")
 
-	services.destroy()
+	runtime.destroy()
 }
 
-func onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate, router *messaging.Router, logger *slog.Logger) {
+func onMessageCreate(ctx context.Context, s *discordgo.Session, m *discordgo.MessageCreate, router *messaging.Router, logger *slog.Logger) {
 	// ignore messages from self, to avoid infinite loops
 	if m.Author.ID == s.State.User.ID {
 		return
@@ -90,26 +109,39 @@ func onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate, router *m
 	}
 
 	msgClient := discord.NewDiscordMessagingClient(logger, s, m.Message)
-	resp, err := router.Dispatch(s, m.Message, msgClient)
+	resp, err := router.Dispatch(ctx, s, m.Message, msgClient)
 
 	if err != nil {
-		slog.Error("Error sending message", "err", err)
+		if errors.Is(err, context.Canceled) {
+			logger.Debug("message handling cancelled")
+			return
+		}
+
+		if errors.Is(err, context.DeadlineExceeded) {
+			logger.Error(
+				"message handling timed out",
+				"err", err)
+			sysErrorResponse(s, m)
+			return
+		}
+
+		logger.Error("Error handling message", "err", err)
 		sysErrorResponse(s, m)
 		return
 	}
 
 	if !resp.WasRouted {
-		noRouteResponse(s, m)
+		noRouteResponse(logger, s, m)
 		return
 	}
 }
 
-func noRouteResponse(s *discordgo.Session, m *discordgo.MessageCreate) {
+func noRouteResponse(logger *slog.Logger, s *discordgo.Session, m *discordgo.MessageCreate) {
 	defaultResp := fmt.Sprintf("Hello <@%s>! You rang?  Give me a command, prefixed with '!', like !help to learn more.", m.Author.ID)
 	_, err := s.ChannelMessageSend(m.ChannelID, defaultResp)
 
 	if err != nil {
-		slog.Error("Error sending message", "err", err)
+		logger.Error("Error sending message", "err", err)
 		sysErrorResponse(s, m)
 	}
 }
@@ -118,7 +150,7 @@ func sysErrorResponse(s *discordgo.Session, m *discordgo.MessageCreate) {
 	s.ChannelMessageSend(m.ChannelID, "Something went wrong trying to process your message. I'm sorry.")
 }
 
-func initRuntime(cfg *config.DiscordBotConfig, logger *slog.Logger) *Runtime {
+func initRuntime(ctx context.Context, cfg *config.DiscordBotConfig, logger *slog.Logger) *Runtime {
 	//Initialize the resty protocol client for the gsm api
 	restyClient := resty.New()
 	restyClient.SetTimeout(time.Duration(cfg.GsmApiConfig.TimeoutMs) * time.Millisecond)
@@ -148,6 +180,7 @@ func initRuntime(cfg *config.DiscordBotConfig, logger *slog.Logger) *Runtime {
 
 	//Return these in a struct for later reference
 	return &Runtime{
+		ctx:            ctx,
 		gsmClient:      gsmApi,
 		router:         router,
 		discordSession: sess,

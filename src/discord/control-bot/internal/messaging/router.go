@@ -1,11 +1,15 @@
 package messaging
 
 import (
+	"context"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
+
+const CommandHandlerTimeoutSeconds = 40
 
 type Command struct {
 	Name    string
@@ -13,7 +17,8 @@ type Command struct {
 	RawText string
 }
 
-type Context struct {
+type RoutingContext struct {
+	Context context.Context
 	Logger  *slog.Logger
 	Sender  string
 	Command *Command
@@ -24,7 +29,7 @@ type DispatchResult struct {
 	WasRouted bool
 }
 
-type Handler func(ctx *Context) error
+type Handler func(ctx *RoutingContext) error
 
 type Middleware func(next Handler) Handler
 
@@ -51,7 +56,12 @@ func (r *Router) Use(m Middleware) {
 	r.middleware = append(r.middleware, m)
 }
 
-func (r *Router) Dispatch(session *discordgo.Session, message *discordgo.Message, msgClient MessagingClient) (result DispatchResult, err error) {
+func (r *Router) Dispatch(
+	ctx context.Context,
+	session *discordgo.Session,
+	message *discordgo.Message,
+	msgClient MessagingClient) (result DispatchResult, err error) {
+
 	res := DispatchResult{
 		WasRouted: false,
 	}
@@ -81,10 +91,21 @@ func (r *Router) Dispatch(session *discordgo.Session, message *discordgo.Message
 
 	res.WasRouted = true
 
-	ctx := &Context{
-		Logger: r.logger,
-		Sender: message.Author.ID,
-		Client: msgClient,
+	//Regulate how long a command can exec so we don't end up in a hung state
+	commandCtx, cancel := context.WithTimeout(ctx, CommandHandlerTimeoutSeconds*time.Second)
+	defer cancel()
+
+	commandLogger := r.logger.With(
+		"sender", message.Author.ID,
+		"command", cmdName,
+		"args", strings.Join(args, ","),
+	)
+
+	routeContext := &RoutingContext{
+		Context: commandCtx,
+		Logger:  commandLogger,
+		Sender:  message.Author.ID,
+		Client:  msgClient,
 		Command: &Command{
 			Name:    cmdName,
 			Args:    args,
@@ -99,7 +120,7 @@ func (r *Router) Dispatch(session *discordgo.Session, message *discordgo.Message
 		chain = r.middleware[i](chain)
 	}
 
-	err = chain(ctx)
+	err = chain(routeContext)
 
 	if err != nil {
 		return res, err

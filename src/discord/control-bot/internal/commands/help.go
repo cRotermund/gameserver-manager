@@ -5,7 +5,7 @@ import (
 )
 
 func HelpCommand() messaging.Handler {
-	return func(ctx *messaging.Context) error {
+	return func(ctx *messaging.RoutingContext) error {
 		message := `Hi, I'm your friendly game server control bot.  Use me to manage the gameservers used in this discord.
 		
 		Usage:
@@ -19,7 +19,6 @@ func HelpCommand() messaging.Handler {
 
 		Use "@{tagme} ![command] --help" for more information about a specific command.`
 
-		ctx.Client.Reply(message)
-		return nil
+		return ctx.Client.Reply(ctx.Context, message)
 	}
 }

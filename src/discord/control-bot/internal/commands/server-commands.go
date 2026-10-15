@@ -13,46 +13,49 @@ import (
 const ServerStatusPollTimeoutSeconds = 30
 
 func ServerStatusCommand(gsm *controlplaneclient.GsmApiClient) messaging.Handler {
-	return func(ctx *messaging.Context) error {
+	return func(ctx *messaging.RoutingContext) error {
 		if len(ctx.Command.Args) < 1 {
-			ctx.Client.Reply("Please include the name of the server, with syntax !serverstatus [server name]. (use !listservers to see your options)")
-			return nil
+			return ctx.Client.Reply(
+				ctx.Context,
+				"Please include the name of the server, with syntax !serverstatus [server name]. (use !listservers to see your options)")
 		}
 
 		serverName := ctx.Command.Args[0]
 
-		summary, err := summaryFromName(serverName, gsm)
+		summary, err := summaryFromName(ctx.Context, serverName, gsm)
 		if err != nil {
 			return err
 		}
 
 		if summary == nil {
-			ctx.Client.Reply(fmt.Sprintf("I could not find a server '%s', are you sure you spelled that right?", serverName))
-			return nil
+			return ctx.Client.Reply(
+				ctx.Context,
+				fmt.Sprintf(
+					"I could not find a server '%s', are you sure you spelled that right?",
+					serverName))
 		}
 
-		ctx.Client.Reply(fmt.Sprintf("Server: '%s' is: %s", serverName, summary.Status))
-
-		return nil
+		return ctx.Client.Reply(
+			ctx.Context,
+			fmt.Sprintf("Server: '%s' is: %s", serverName, summary.Status))
 	}
 }
 
 func StartServerCommand(gsm *controlplaneclient.GsmApiClient) messaging.Handler {
-	return func(ctx *messaging.Context) error {
+	return func(ctx *messaging.RoutingContext) error {
 		return handleStateChangeCommand("start", ctx, gsm)
 	}
 }
 
 func StopServerCommand(gsm *controlplaneclient.GsmApiClient) messaging.Handler {
-	return func(ctx *messaging.Context) error {
+	return func(ctx *messaging.RoutingContext) error {
 		return handleStateChangeCommand("stop", ctx, gsm)
 	}
 }
 
 func ListServersCommand(gsm *controlplaneclient.GsmApiClient) messaging.Handler {
-	return func(ctx *messaging.Context) error {
-
-		summaryArr, err := gsm.ListServers(context.TODO())
+	return func(ctx *messaging.RoutingContext) error {
+		summaryArr, err := gsm.ListServers(ctx.Context)
 		if err != nil {
 			return err
 		}
@@ -71,73 +74,89 @@ func ListServersCommand(gsm *controlplaneclient.GsmApiClient) messaging.Handler 
 			}
 		}
 
-		ctx.Client.Reply(sb.String())
+		if err := ctx.Client.Reply(
+			ctx.Context,
+			sb.String()); err != nil {
+			return err
+		}
+
 		return nil
 	}
 }
 
-func handleStateChangeCommand(statecmd string, ctx *messaging.Context, gsm *controlplaneclient.GsmApiClient) error {
+func handleStateChangeCommand(statecmd string, ctx *messaging.RoutingContext, gsm *controlplaneclient.GsmApiClient) error {
 	if len(ctx.Command.Args) < 1 {
-		ctx.Client.Reply(
+		return ctx.Client.Reply(
+			ctx.Context,
 			"Please include the server name, with syntax !serverstatus [server name]. (use !listservers to see your options)")
-		return nil
 	}
 
 	serverName := ctx.Command.Args[0]
 
-	summary, err := summaryFromName(serverName, gsm)
+	summary, err := summaryFromName(ctx.Context, serverName, gsm)
 	if err != nil {
 		return err
 	}
 
 	if summary == nil {
-		ctx.Client.Reply(
+		return ctx.Client.Reply(
+			ctx.Context,
 			fmt.Sprintf(
 				"I could not find a server '%s', are you sure you spelled that right?",
 				serverName))
-		return nil
 	}
 
 	if statecmd == "start" {
-		_, err = gsm.StartServer(context.TODO(), summary.ServerID)
+		_, err = gsm.StartServer(ctx.Context, summary.ServerID)
 	} else {
-		_, err = gsm.StopServer(context.TODO(), summary.ServerID)
+		_, err = gsm.StopServer(ctx.Context, summary.ServerID)
 	}
 
 	if err != nil {
 		return err
 	}
 
-	ctx.Client.Reply(fmt.Sprintf("'%s' request issued, polling the server for appropriate status...", statecmd))
+	if err := ctx.Client.Reply(
+		ctx.Context,
+		fmt.Sprintf(
+			"'%s' request issued, polling the server for appropriate status...",
+			statecmd)); err != nil {
+		return err
+	}
 
 	desiredState := "running"
 	if statecmd == "stop" {
 		desiredState = "stopped"
 	}
 
-	achieved, lastStatus, err := pollForStatus(summary.ServerID, desiredState, gsm)
+	achieved, lastStatus, err := pollForStatus(ctx.Context, summary.ServerID, desiredState, gsm)
 	if err != nil {
 		return err
 	}
 
 	if !achieved {
-		ctx.Client.Reply(
+		if err := ctx.Client.Reply(
+			ctx.Context,
 			fmt.Sprintf(
 				"Timed out waiting for the desired status (%s) on server '%s'.  Last seen status: %s",
 				desiredState,
 				serverName,
-				lastStatus))
+				lastStatus)); err != nil {
+			return err
+		}
 
 		return nil
 	}
 
-	ctx.Client.Reply(fmt.Sprintf("Succes, server: '%s' is: %s", serverName, lastStatus))
-
-	return nil
+	return ctx.Client.Reply(
+		ctx.Context,
+		fmt.Sprintf("Succes, server: '%s' is: %s",
+			serverName,
+			lastStatus))
 }
 
-func summaryFromName(name string, gsm *controlplaneclient.GsmApiClient) (summary *controlplaneclient.ServerSummary, err error) {
-	summaryArr, err := gsm.ListServers(context.TODO())
+func summaryFromName(ctx context.Context, name string, gsm *controlplaneclient.GsmApiClient) (summary *controlplaneclient.ServerSummary, err error) {
+	summaryArr, err := gsm.ListServers(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -151,18 +170,25 @@ func summaryFromName(name string, gsm *controlplaneclient.GsmApiClient) (summary
 	return nil, nil
 }
 
-func pollForStatus(serverId string, goal string, gsm *controlplaneclient.GsmApiClient) (achieved bool, last string, err error) {
+func pollForStatus(ctx context.Context, serverId string, goal string, gsm *controlplaneclient.GsmApiClient) (achieved bool, last string, err error) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	timeout := time.After(ServerStatusPollTimeoutSeconds * time.Second)
+	timeout := time.NewTimer(ServerStatusPollTimeoutSeconds * time.Second)
+	defer timeout.Stop()
 
 	var lastStatus string
 
 	for {
 		select {
+		case <-ctx.Done():
+			return false, lastStatus, ctx.Err()
+
+		case <-timeout.C:
+			return false, lastStatus, nil
+
 		case <-ticker.C:
-			summary, err := gsm.GetServer(context.TODO(), serverId)
+			summary, err := gsm.GetServer(ctx, serverId)
 
 			if err != nil {
 				return false, lastStatus, err
@@ -172,9 +198,6 @@ func pollForStatus(serverId string, goal string, gsm *controlplaneclient.GsmApiC
 			if strings.EqualFold(goal, string(summary.Status)) {
 				return true, lastStatus, nil
 			}
-
-		case <-timeout:
-			return false, lastStatus, nil
 		}
 	}
 }

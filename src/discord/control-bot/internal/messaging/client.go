@@ -1,5 +1,7 @@
 package messaging
 
+import "context"
+
 type MessagingClient interface {
-	Reply(msg string)
+	Reply(ctx context.Context, msg string) error
 }
