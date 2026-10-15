@@ -84,6 +84,7 @@ func onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate, router *m
 		}
 	}
 
+	// ignore, if there is no metntion.
 	if !isMentioned {
 		return
 	}

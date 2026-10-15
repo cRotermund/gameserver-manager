@@ -14,7 +14,7 @@ const GsmPortVarName = "GSM_API_PORT"
 const GsmApiTimeoutVarName = "GSM_API_TIMEOUT_MS"
 const DiscordTokenVarName = "DISCORD_TOKEN"
 
-const DefaultGsmApiTimeoutMs int = 200
+const DefaultGsmApiTimeoutMs int = 5000 //This is pretty darn, high, but the aws calls behind the scenes can be slow.
 
 type DiscordBotConfig struct {
 	logger       *slog.Logger
