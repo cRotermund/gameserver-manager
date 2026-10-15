@@ -34,7 +34,7 @@ func (c *DiscordMessagingClient) Reply(ctx context.Context, msg string) error {
 
 	if err != nil {
 		c.logger.Error(
-			"Error sending message to discord.",
+			"failed to send Discord message",
 			"err", err)
 
 		return err

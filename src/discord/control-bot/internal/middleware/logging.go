@@ -6,11 +6,11 @@ import (
 	"github.com/cRotermund/gameserver-manager/src/discord/control-bot/internal/messaging"
 )
 
-func LoggingMiddelware(next messaging.Handler) messaging.Handler {
+func LoggingMiddleware(next messaging.Handler) messaging.Handler {
 	return func(ctx *messaging.RoutingContext) error {
 		start := time.Now()
 
-		ctx.Logger.Info("Message handling start")
+		ctx.Logger.Debug("handling message")
 
 		err := next(ctx)
 
@@ -20,12 +20,12 @@ func LoggingMiddelware(next messaging.Handler) messaging.Handler {
 
 		if err != nil {
 			ctx.Logger.Error(
-				"Message handling failed with error",
+				"message handling failed",
 				append(logCtx, "err", err)...)
 
 		} else {
 			ctx.Logger.Info(
-				"Message handling complete",
+				"message handling completed",
 				logCtx...)
 		}
 

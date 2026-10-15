@@ -73,17 +73,17 @@ func main() {
 
 	err = runtime.discordSession.Open()
 	if err != nil {
-		logger.Error("Error opening connection to Discord", "err", err)
+		logger.Error("failed to open Discord connection", "err", err)
 		os.Exit(1)
 	}
 
-	logger.Info("Bot is now running.")
+	logger.Info("bot is running")
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
 
-	logger.Info("Shutting down gracefully...")
+	logger.Info("shutting down gracefully")
 
 	runtime.destroy()
 }
@@ -121,33 +121,43 @@ func onMessageCreate(ctx context.Context, s *discordgo.Session, m *discordgo.Mes
 			logger.Error(
 				"message handling timed out",
 				"err", err)
-			sysErrorResponse(s, m)
+			sysErrorResponse(ctx, s, m)
 			return
 		}
 
-		logger.Error("Error handling message", "err", err)
-		sysErrorResponse(s, m)
+		logger.Error("failed to handle message", "err", err)
+		sysErrorResponse(ctx, s, m)
 		return
 	}
 
 	if !resp.WasRouted {
-		noRouteResponse(logger, s, m)
+		noRouteResponse(ctx, logger, s, m)
 		return
 	}
 }
 
-func noRouteResponse(logger *slog.Logger, s *discordgo.Session, m *discordgo.MessageCreate) {
+func noRouteResponse(ctx context.Context, logger *slog.Logger, s *discordgo.Session, m *discordgo.MessageCreate) {
 	defaultResp := fmt.Sprintf("Hello <@%s>! You rang?  Give me a command, prefixed with '!', like !help to learn more.", m.Author.ID)
-	_, err := s.ChannelMessageSend(m.ChannelID, defaultResp)
+
+	_, err := s.ChannelMessageSend(
+		m.ChannelID,
+		defaultResp,
+		discordgo.WithContext(ctx))
 
 	if err != nil {
-		logger.Error("Error sending message", "err", err)
-		sysErrorResponse(s, m)
+		logger.Error("failed to send no-route response", "err", err)
+
+		if !errors.Is(err, context.Canceled) {
+			sysErrorResponse(ctx, s, m)
+		}
 	}
 }
 
-func sysErrorResponse(s *discordgo.Session, m *discordgo.MessageCreate) {
-	s.ChannelMessageSend(m.ChannelID, "Something went wrong trying to process your message. I'm sorry.")
+func sysErrorResponse(ctx context.Context, s *discordgo.Session, m *discordgo.MessageCreate) {
+	s.ChannelMessageSend(
+		m.ChannelID,
+		"Something went wrong trying to process your message. I'm sorry.",
+		discordgo.WithContext(ctx))
 }
 
 func initRuntime(ctx context.Context, cfg *config.DiscordBotConfig, logger *slog.Logger) *Runtime {
@@ -164,7 +174,7 @@ func initRuntime(ctx context.Context, cfg *config.DiscordBotConfig, logger *slog
 
 	//Initialize the router, the middleware, and the command handlers
 	router := messaging.NewRouter("!", logger)
-	router.Use(middleware.LoggingMiddelware)
+	router.Use(middleware.LoggingMiddleware)
 	router.Handle("startserver", commands.StartServerCommand(gsmApi))
 	router.Handle("stopserver", commands.StopServerCommand(gsmApi))
 	router.Handle("serverstatus", commands.ServerStatusCommand(gsmApi))
@@ -174,7 +184,7 @@ func initRuntime(ctx context.Context, cfg *config.DiscordBotConfig, logger *slog
 	//Connect to discord and capture the session information
 	sess, err := discordgo.New("Bot " + cfg.DiscordToken)
 	if err != nil {
-		logger.Error("Error creating Discord session", "err", err)
+		logger.Error("failed to create Discord session", "err", err)
 		os.Exit(1)
 	}
 

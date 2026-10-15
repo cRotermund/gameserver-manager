@@ -69,7 +69,7 @@ func (cfg *DiscordBotConfig) initEnv() error {
 	err := godotenv.Load()
 
 	if err != nil {
-		cfg.logger.Warn("No .env file found, using existing environment", "Error", err)
+		cfg.logger.Warn(".env file not found; using existing environment", "err", err)
 	}
 
 	return nil
@@ -79,7 +79,7 @@ func (cfg *DiscordBotConfig) loadRequiredEnvAsString(v string) (string, error) {
 	output := os.Getenv(v)
 
 	if output == "" {
-		cfg.logger.Error("Required environment variable is missing", "VariableName", v)
+		cfg.logger.Error("required environment variable is missing", "variable", v)
 		return "", errors.New("Required environment variable is not populated")
 	}
 
@@ -90,7 +90,7 @@ func (cfg *DiscordBotConfig) loadRequiredEnvAsInt(v string) (int, error) {
 	output := os.Getenv(v)
 
 	if output == "" {
-		cfg.logger.Error("Required environment variable is missing", "VariableName", v)
+		cfg.logger.Error("required environment variable is missing", "variable", v)
 		return -1, errors.New("Required environment variable is not populated")
 	}
 
@@ -98,9 +98,9 @@ func (cfg *DiscordBotConfig) loadRequiredEnvAsInt(v string) (int, error) {
 
 	if err != nil {
 		cfg.logger.Error(
-			"Could not parse required environment variable as integer",
-			"VariableName", v,
-			"VariableValue", output)
+			"could not parse required environment variable as integer",
+			"variable", v,
+			"err", err)
 		return -1, err
 	}
 
@@ -121,9 +121,9 @@ func (cfg *DiscordBotConfig) loadOptionalValueAsInt(v string, defaultValue *int)
 
 	if err != nil {
 		cfg.logger.Error(
-			"Could not parse environment variable as integer",
-			"VariableName", v,
-			"VariableValue", output)
+			"could not parse environment variable as integer",
+			"variable", v,
+			"err", err)
 		return nil, err
 	}
 
