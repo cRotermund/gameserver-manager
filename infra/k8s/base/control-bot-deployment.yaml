@@ -27,4 +27,4 @@ spec:
             - name: GSM_API_HOST
               value: control-plane-api
             - name: GSM_API_PORT
-              value: 8080
+              value: "8080"
